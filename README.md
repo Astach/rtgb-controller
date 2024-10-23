@@ -6,25 +6,26 @@ RTGB Controller is responsible for scheduling command to controller an active fe
 
 1. Receives an event from the RTGB API that includes the fermentation steps to send to a chamber
 2. Convert the event to the corresponding scheduling commands
-3. Store in a DB all the scheduling commands. Command description:
-   - Type <Start|Increase|Decrease|Stop|>
-   - Value <Float>
-   - Session <Session ID>
-   - Target <Cooling|Heating HardwareID>
-   - Date <Epoch> Status<Planned|Sent|Acknowledged>
+3. Store in a DB all the scheduling commands.
 4. Every minute checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
 5. Update the command as Sent
 6. Update the command as Acknowledged when the socket responds to the command (via MQTT)
-7. Delete the scheduled commands once the STOP command is Acknowledged/ (or sent?)
+7. Delete the scheduled commands once the StopFermentation command is Acknowledged/ (or sent?)
 
 ### Command description
 
-- Type
+_METADATA_
 
-  - Start: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
-  - Increase: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
-  - Decrease: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
-  - Stop: Stop the fermentation at the given `Value`. e.g. Stop 20
+- ID <Command ID>
+- SentAt <Epoch of the command sending>
+- Version <Command Version>
+- Type <Command Type>
+  - StartFermentation: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
+  - IncreaseTemperature: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
+  - DecreaseTemperature: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
+  - StopFermentation: Stop the fermentation at the given `Value`. e.g. Stop 20
+
+_DATA_
 
 - Value: A temperature value, can represent a temperature in Celcius or an absolute delta
 - Session : The session identifier associated with this command
@@ -37,11 +38,24 @@ RTGB Controller is responsible for scheduling command to controller an active fe
 
 #### Examples
 
-- `Start 22 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Acknowledged`
-- `Increase 4 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Planned`
+- `StartFermentation 22 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Acknowledged`
+- `IncreaseTemperature 4 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Planned`
 
 ## Rules
 
-- The first command must be a `START` command
-- The last command must be a `STOP` command
-- There can be only one `START` and one `STOP` command
+- The first command must be a `StartFermentation` command
+- The last command must be a `StopFermentation` command
+- There can be only one `StartFermentation` and one `StopFermentation` command
+
+The commands are sent over MQTT using MATTER protocol this means the payload is sent using protobuf.
+
+- HEADER: Contains message metadata
+  - ID
+  - SentAt
+  - Version
+  - Type
+- PAYLOAD:
+- ClusterID
+- AttributesID
+- Value
+- Target
