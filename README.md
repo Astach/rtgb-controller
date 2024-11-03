@@ -50,12 +50,14 @@ _DATA_
 The commands are sent over MQTT using MATTER protocol this means the payload is sent using protobuf.
 
 - HEADER: Contains message metadata
+
   - ID
   - SentAt
   - Version
   - Type
+
 - PAYLOAD:
-- ClusterID
-- AttributesID
-- Value
-- Target
+  - ClusterID
+  - AttributesID
+  - Value
+  - Target

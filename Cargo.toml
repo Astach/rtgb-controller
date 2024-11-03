@@ -3,6 +3,19 @@ name = "rtgb-controller"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "internal"
+path = "src/lib/lib.rs"
+
 [dependencies]
+anyhow = "1.0.92"
+axum = "0.7.7"
+async-nats = "0.37.0"
+sqlx = { version = "0.8.2", features = [
+  "runtime-tokio",
+  "postgres",
+  "macros",
+  "uuid",
+] }
 tokio = { version = "1.40.0", features = ["full"] }
 uuid = { version = "1.11.0", features = ["v4"] }

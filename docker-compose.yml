@@ -1,0 +1,38 @@
+version: "3.8"
+
+networks:
+  shared-network:
+    name: shared-network
+    external: false
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats
+    command:
+      - "--jetstream"
+      - "--http_port=8222"
+      - "--debug=true"
+      - "--trace=true"
+    networks:
+      - shared-network
+    ports:
+      - "4222:4222" # Client connections
+      - "6222:6222" # Clustering
+      - "8222:8222" # HTTP monitoring
+    volumes:
+      - nats-data:/data
+      - nats-config:/etc/nats
+    environment:
+      - NATS_SERVER_NAME=nats-server
+      - NATS_USERNAME=admin
+      - NATS_PASSWORD=localpassword
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8222/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  nats-data:
+  nats-config:
