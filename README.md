@@ -41,6 +41,90 @@ _DATA_
 - `StartFermentation 22 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Acknowledged`
 - `IncreaseTemperature 4 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Planned`
 
+## Start the project
+
+### For testing and development purposes, generate a self signed certificate
+
+1. Client side
+   a. Generate CA private key and certificate
+
+```
+openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
+    -keyout ca.key -out ca.crt \
+    -subj "/CN=NATS CA/O=My Organization/C=US"
+```
+
+b. Generate client private key
+
+```
+openssl genrsa -out client.key 4096
+```
+
+c. Generate client Certificate Signing Request (CSR)
+
+```
+openssl req -new -key client.key -out client.csr \
+    -subj "/CN=nats-client/O=My Organization/C=US"
+```
+
+d. Sign client certificate with CA [!CAUTION]
+
+```
+openssl x509 -req -days 365 -in client.csr \
+    -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -out client.crt
+```
+
+e. Set permissions
+
+```
+chmod 600 *.key
+chmod 644 *.crt
+```
+
+2. Server side
+   a. Generate CA private key and certificate
+
+```
+openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
+    -keyout ca.key -out ca.crt \
+    -subj "/CN=NATS CA/O=My Organization/C=US"
+```
+
+b. Generate server private key
+
+```
+openssl genrsa -out server.key 4096
+```
+
+c. Generate server Certificate Signing Request (CSR)
+
+```
+openssl req -new -key server.key -out server.csr \
+    -subj "/CN=localhost/O=My Organization/C=US" \
+    -addext "subjectAltName = DNS:localhost,DNS:nats-server,IP:127.0.0.1"
+```
+
+d. Sign server certificate with CA
+
+```
+openssl x509 -req -days 365 -in server.csr \
+    -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -out server.crt \
+    -extfile <(printf "subjectAltName=DNS:localhost,DNS:nats-server,IP:127.0.0.1")
+```
+
+e. Add the server conf
+
+```
+tls {
+  cert_file: "./certs/server.crt"
+  key_file: "./certs/server.key"
+  ca_file: "./certs/ca.crt"
+  verify: true
+}
+```
+
 ## Rules
 
 - The first command must be a `StartFermentation` command
