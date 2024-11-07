@@ -12,6 +12,13 @@ pub struct NatsConfig {
     pub host: String,
     pub port: i8,
     pub cert: CertConfig,
+    pub consumer: ConsumerConfig,
+}
+
+#[derive(Deserialize)]
+pub struct ConsumerConfig {
+    pub subjects: Vec<String>,
+    pub name: String,
 }
 
 #[derive(Deserialize)]

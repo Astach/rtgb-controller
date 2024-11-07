@@ -45,6 +45,8 @@ _DATA_
 
 ### For testing and development purposes, generate a self signed certificate
 
+0. Create a folder certs and a folder certs/server and certs/client
+
 1. Client side
    a. Generate CA private key and certificate
 
@@ -57,22 +59,22 @@ openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
 b. Generate client private key
 
 ```
-openssl genrsa -out client.key 4096
+openssl genrsa -out client/client.key 4096
 ```
 
 c. Generate client Certificate Signing Request (CSR)
 
 ```
-openssl req -new -key client.key -out client.csr \
+openssl req -new -key client/client.key -out client/client.csr \
     -subj "/CN=nats-client/O=My Organization/C=US"
 ```
 
 d. Sign client certificate with CA [!CAUTION]
 
 ```
-openssl x509 -req -days 365 -in client.csr \
+openssl x509 -req -days 365 -in client/client.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
-    -out client.crt
+    -out client/client.crt
 ```
 
 e. Set permissions
@@ -83,34 +85,27 @@ chmod 644 *.crt
 ```
 
 2. Server side
-   a. Generate CA private key and certificate
+
+a. Generate server private key
 
 ```
-openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
-    -keyout ca.key -out ca.crt \
-    -subj "/CN=NATS CA/O=My Organization/C=US"
+openssl genrsa -out server/server.key 4096
 ```
 
-b. Generate server private key
+b. Generate server Certificate Signing Request (CSR)
 
 ```
-openssl genrsa -out server.key 4096
-```
-
-c. Generate server Certificate Signing Request (CSR)
-
-```
-openssl req -new -key server.key -out server.csr \
+openssl req -new -key server/server.key -out server/server.csr \
     -subj "/CN=localhost/O=My Organization/C=US" \
     -addext "subjectAltName = DNS:localhost,DNS:nats-server,IP:127.0.0.1"
 ```
 
-d. Sign server certificate with CA
+c. Sign server certificate with CA
 
 ```
-openssl x509 -req -days 365 -in server.csr \
+openssl x509 -req -days 365 -in server/server.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
-    -out server.crt \
+    -out server/server.crt \
     -extfile <(printf "subjectAltName=DNS:localhost,DNS:nats-server,IP:127.0.0.1")
 ```
 
@@ -124,6 +119,22 @@ tls {
   verify: true
 }
 ```
+
+### NATS
+
+1. Install nats cli and export the following variables
+
+```
+export NATS_URL=nats://localhost:4222
+export NATS_CA=/path/to/certs/ca.crt
+export NATS_CERT=/path/to/certs/client.crt
+export NATS_KEY=/path/to/certs/client.key
+export NATS_TLS_VERIFY=true
+```
+
+2. Launch the nats server using `docker compose up`
+3. Send a message `nats publish <subject> <message>`
+4. Subscribe to subject `nats subscribe <subject>`
 
 ## Rules
 
