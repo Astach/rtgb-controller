@@ -16,3 +16,4 @@ Cargo.lock
 
 ### Certs ###
 certs/*
+config.toml

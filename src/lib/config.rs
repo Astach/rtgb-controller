@@ -26,6 +26,7 @@ pub struct CertConfig {
     pub absolute_folder_path: String,
     pub key_file_name: String,
     pub cert_file_name: String,
+    pub root_ca_file_name: String,
 }
 
 impl Config {
