@@ -1,24 +1,17 @@
+use anyhow::Result;
+use async_nats::jetstream::{self, consumer};
+use internal::{config::Config, inbound::nats::Nats};
 #[tokio::main]
-async fn main() -> Result<(), async_nats::Error> {
-    let nats_url = env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string());
-
-    let client = async_nats::connect(nats_url).await?;
-
-    let jetstream = jetstream::new(client);
-
-    let stream_name = String::from("EVENTS");
-
-    let consumer: PullConsumer = jetstream
-        .create_stream(jetstream::stream::Config {
-            name: stream_name,
-            subjects: vec!["events.>".to_string()],
-            ..Default::default()
-        })
-        .await?
-        .create_consumer(jetstream::consumer::pull::Config {
-            durable_name: Some("consumer".to_string()),
-            ..Default::default()
-        })
-        .await?;
-    Ok(())
+async fn main() -> Result<consumer::Consumer<consumer::pull::Config>> {
+    let conf = Config::load("config.toml").unwrap();
+    let nats = Nats::new(conf.nats_config).unwrap();
+    let client = nats.connect().await.unwrap();
+    let context = jetstream::new(client);
+    nats.create_consumer(context).await;
+client.subscribe(jj)
+    loop {
+        if let Some(msg) = sub.next().await {
+            println!("Received: {}", String::from_utf8_lossy(&msg.payload));
+        }
+    }
 }
