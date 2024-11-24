@@ -8,13 +8,13 @@ use crate::utils::{file::FileUtils, pem::PemUtils};
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub nats_config: NatsConfig,
+    pub nats: NatsConfig,
 }
 
 #[derive(Deserialize)]
 pub struct NatsConfig {
     pub host: String,
-    pub port: i8,
+    pub port: u16,
     pub cert: CertConfig,
     pub consumer: ConsumerConfig,
 }
