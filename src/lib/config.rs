@@ -22,6 +22,7 @@ pub struct NatsConfig {
 #[derive(Deserialize)]
 pub struct ConsumerConfig {
     pub subjects: Vec<String>,
+    pub delivery_subject: String,
     pub name: String,
 }
 

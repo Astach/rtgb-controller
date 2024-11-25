@@ -3,7 +3,10 @@ use futures::future::BoxFuture;
 use rustls::{ClientConfig, RootCertStore};
 
 use crate::config::NatsConfig;
-use async_nats::{jetstream, ConnectOptions, SubscribeError, Subscriber};
+use async_nats::{
+    jetstream::{self, stream},
+    ConnectOptions, SubscribeError, Subscriber,
+};
 
 pub struct Nats {
     nats_config: NatsConfig,
@@ -39,7 +42,7 @@ impl Nats {
     pub async fn create_consumer(
         &self,
         context: async_nats::jetstream::Context,
-    ) -> Result<jetstream::consumer::Consumer<jetstream::consumer::push::Config>> {
+    ) -> Result<jetstream::consumer::Consumer<jetstream::consumer::pull::Config>> {
         context
             .create_stream(self.stream_config())
             .await
@@ -52,29 +55,24 @@ impl Nats {
         jetstream::stream::Config {
             name: self.nats_config.consumer.name.to_string(),
             subjects: self.nats_config.consumer.subjects.clone(),
+            retention: stream::RetentionPolicy::WorkQueue,
             ..Default::default()
         }
     }
-    fn consumer_config(&self) -> jetstream::consumer::push::Config {
-        jetstream::consumer::push::Config {
-            durable_name: Some("rtgb-controller-consumer".to_string()),
+    fn consumer_config(&self) -> jetstream::consumer::pull::Config {
+        jetstream::consumer::pull::Config {
+            durable_name: Some(self.nats_config.consumer.name.to_string()),
+            filter_subjects: self.nats_config.consumer.subjects.to_owned(),
             ..Default::default()
         }
     }
     pub async fn subscribe(
         &self,
         client: &async_nats::Client,
-    ) -> Vec<BoxFuture<'static, Result<Subscriber, SubscribeError>>> {
-        self.nats_config
-            .consumer
-            .subjects
-            .iter()
-            .map(|s| {
-                let s = s.to_string();
-                let client = client.clone();
-                Box::pin(async move { client.subscribe(s).await })
-                    as BoxFuture<'static, Result<Subscriber, SubscribeError>>
-            })
-            .collect()
+    ) -> BoxFuture<'static, Result<Subscriber, SubscribeError>> {
+        let sub = self.nats_config.consumer.delivery_subject.to_string();
+        let client = client.clone();
+        Box::pin(async move { client.subscribe(sub).await })
+            as BoxFuture<'static, Result<Subscriber, SubscribeError>>
     }
 }
