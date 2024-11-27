@@ -8,17 +8,20 @@ name = "internal"
 path = "src/lib/lib.rs"
 
 [dependencies]
-anyhow = "1.0.92"
+anyhow = "1.0.93"
 axum = "0.7.7"
-async-nats = "0.37.0"
-serde = { version = "1.0.210", features = ["std", "derive"] }
+async-nats = "0.38.0"
+futures = "0.3.31"
+serde = { version = "1.0.214", features = ["std", "derive"] }
 sqlx = { version = "0.8.2", features = [
   "runtime-tokio",
   "postgres",
   "macros",
   "uuid",
 ] }
-thiserror = "1.0.67"
+rustls = "0.23.16"
+rustls-pemfile = "2.2"
+thiserror = "2.0.1"
 toml = "0.8.19"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.41.1", features = ["full"] }
 uuid = { version = "1.11.0", features = ["v4"] }
