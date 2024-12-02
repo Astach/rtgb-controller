@@ -1,6 +1,6 @@
 use async_nats::jetstream;
 use futures::TryStreamExt;
-use internal::{config::Config, inbound::nats::Nats, utils::pem::PemUtils};
+use internal::{config::config::Config, inbound::nats::Nats, utils::pem::PemUtils};
 #[tokio::main]
 async fn main() -> Result<(), async_nats::Error> {
     PemUtils::init_provider();
