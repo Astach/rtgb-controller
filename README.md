@@ -45,31 +45,33 @@ _DATA_
 
 ### For testing and development purposes, generate a self signed certificate
 
-0. Create a folder certs and a folder certs/server and certs/client
+1. Create the following folders `certs`, `certs/server` and `certs/client`
 
-1. Client side
-   a. Generate CA private key and certificate
+2. Generate CA private key and certificate
 
 ```
 openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
     -keyout ca.key -out ca.crt \
-    -subj "/CN=NATS CA/O=My Organization/C=US"
+    -subj "/CN=RTGB CA/O=My Organization/C=US"
+#### Client side
 ```
 
-b. Generate client private key
+#### Client side
+
+1. Generate client private key
 
 ```
 openssl genrsa -out client/client.key 4096
 ```
 
-c. Generate client Certificate Signing Request (CSR)
+2. Generate client Certificate Signing Request (CSR)
 
 ```
 openssl req -new -key client/client.key -out client/client.csr \
-    -subj "/CN=nats-client/O=My Organization/C=US"
+    -subj "/CN=RTGB/O=My Organization/C=US"
 ```
 
-d. Sign client certificate with CA [!CAUTION]
+3. Sign client certificate with CA
 
 ```
 openssl x509 -req -days 365 -in client/client.csr \
@@ -77,30 +79,30 @@ openssl x509 -req -days 365 -in client/client.csr \
     -out client/client.crt
 ```
 
-e. Set permissions
+4. Set permissions
 
 ```
 chmod 600 *.key
 chmod 644 *.crt
 ```
 
-2. Server side
+#### Server side
 
-a. Generate server private key
+1. Generate server private key
 
 ```
 openssl genrsa -out server/server.key 4096
 ```
 
-b. Generate server Certificate Signing Request (CSR)
+2. Generate server Certificate Signing Request (CSR)
 
 ```
 openssl req -new -key server/server.key -out server/server.csr \
-    -subj "/CN=localhost/O=My Organization/C=US" \
+    -subj "/CN=RTGB/O=My Organization/C=US" \
     -addext "subjectAltName = DNS:localhost,DNS:nats-server,IP:127.0.0.1"
 ```
 
-c. Sign server certificate with CA
+3. Sign server certificate with CA
 
 ```
 openssl x509 -req -days 365 -in server/server.csr \
@@ -109,7 +111,12 @@ openssl x509 -req -days 365 -in server/server.csr \
     -extfile <(printf "subjectAltName=DNS:localhost,DNS:nats-server,IP:127.0.0.1")
 ```
 
-e. Add the server conf
+### NATS
+
+#### Configuration
+
+1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill the NATS values
+2. Add/Edit the nats server conf at `/docker/nats/server.conf`
 
 ```
 tls {
@@ -120,7 +127,7 @@ tls {
 }
 ```
 
-### NATS
+#### Usage
 
 1. Install nats cli and export the following variables
 
@@ -136,13 +143,30 @@ export NATS_TLS_VERIFY=true
 3. Send a message `nats publish <subject> <message>`
 4. Subscribe to subject `nats subscribe <subject>`
 
+### Postgres
+
+1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill the POSTGRES values
+2. Add/Edit the posgresql conf at `/docker/postgres/postgresql.conf`
+3. Add/Edit the hba conf at `/docker/postgres/pg_hba.conf`
+
+### Service Configuration
+
+1. Create a `config.toml` file at `./config.toml` by using `./config.template.toml` and this the values accordingly
+
 ## Rules
+
+### Events
+
+- You can find the documentation for the schedule events received from the API [there](https://github.com/Astach/rtgb?tab=readme-ov-file#command-description).
+- You can fine the documentation for the events reveived from MQTT [there](). //TODO
+
+### Scheduling Command
 
 - The first command must be a `StartFermentation` command
 - The last command must be a `StopFermentation` command
 - There can be only one `StartFermentation` and one `StopFermentation` command
 
-The commands are sent over MQTT using MATTER protocol this means the payload is sent using protobuf.
+The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this means the payload is sent using protobuf.
 
 - HEADER: Contains message metadata
 
