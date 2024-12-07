@@ -1,6 +1,12 @@
-use async_nats::jetstream;
+use anyhow::{Context, Result};
+use async_nats::{jetstream, Message};
 use futures::TryStreamExt;
-use internal::{config::config::Config, inbound::nats::Nats, utils::pem::PemUtils};
+use internal::{
+    config::config::Config,
+    core::domain::{self},
+    inbound::nats::Nats,
+    utils::pem::PemUtils,
+};
 #[tokio::main]
 async fn main() -> Result<(), async_nats::Error> {
     PemUtils::init_provider();
@@ -20,19 +26,16 @@ async fn main() -> Result<(), async_nats::Error> {
             message.ack().await?;
         }
     }
-    //     let subs = nats.subscribe(&client).await;
-    //     match subs.await {
-    //         Ok(s) => process_messages(s).await,
-    //         Err(e) => {
-    //             eprint!("Shit happened {:?}", e)
-    //         }
-    //     }
-    //
-    //     async fn process_messages(mut subscriber: async_nats::Subscriber) {
-    //         // Process each message
-    //         while let Some(message) = subscriber.next().await {
-    //             println!("Received message: {:?}", message);
-    //             subscriber.ack(message);
-    //         }
-    //     }
+}
+
+pub trait Convert {
+    fn to_domain(&self) -> Result<domain::message::Message>;
+}
+
+impl Convert for async_nats::Message {
+    fn to_domain(&self) -> Result<domain::message::Message> {
+        std::str::from_utf8(self.payload.as_ref())
+            .context("Cannot convert raw payload to UTF-8")
+            .map(|utf8| serde_json::from_str(utf))
+    }
 }

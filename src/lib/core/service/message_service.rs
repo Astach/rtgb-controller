@@ -1,4 +1,4 @@
-use crate::core::domain::event::EventMessage;
+use crate::core::domain::message::Message;
 use crate::core::port::messaging::{MessageDrivenPort, MessageDriverPort};
 
 pub struct MessageService<R: MessageDrivenPort> {
@@ -6,7 +6,7 @@ pub struct MessageService<R: MessageDrivenPort> {
 }
 
 impl<R: MessageDrivenPort> MessageDriverPort for MessageService<R> {
-    fn process(&self, event: EventMessage) {
+    fn process(&self, event: Message) {
         //TODO use correct method
         self.repository.fetch();
         todo!()

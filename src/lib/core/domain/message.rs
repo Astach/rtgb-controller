@@ -1,16 +1,16 @@
 use uuid::{Timestamp, Uuid};
 
-pub struct EventMessage {
+pub struct Message {
     id: Uuid,
     sent_at: Timestamp,
     version: u32,
-    event_type: EventType,
+    message_type: MesssageType,
 }
 
-enum EventType {
-    Schedule(ScheduleEventData),
+enum MesssageType {
+    Schedule(ScheduleMessageData),
 }
-struct ScheduleEventData {
+struct ScheduleMessageData {
     session_id: Uuid,
     steps: Vec<FermentationStep>,
 }

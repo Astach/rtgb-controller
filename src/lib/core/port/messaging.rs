@@ -1,7 +1,7 @@
-use crate::core::domain::event::EventMessage;
+use crate::core::domain::message::Message;
 
 pub trait MessageDriverPort {
-    fn process(&self, event: EventMessage);
+    fn process(&self, event: Message);
 }
 pub trait MessageDrivenPort {
     fn fetch(&self);

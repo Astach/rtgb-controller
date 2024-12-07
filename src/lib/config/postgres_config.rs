@@ -1,26 +1,23 @@
-use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::fmt::Write;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
+
+use super::config::{CertConfig, CertFileType};
 
 #[derive(Deserialize)]
 pub struct PostgresConfig {
+    pub name: String,
     pub host: String,
     pub port: u16,
-    pub name: String,
-    pub user: String,
-    pub password: String,
-    pub ssl_mode: String,
+    pub cert: CertConfig,
 }
 
 impl PostgresConfig {
-    pub fn to_url(&self) -> Result<String> {
-        let mut url = String::new();
-        write!(
-            &mut url,
-            "postgres://{}:{}@{}:{}/{}?sslmode={}",
-            self.user, self.password, self.host, self.port, self.name, self.ssl_mode
-        )
-        .context("Unable to build postgres url")
-        .map(|_| url)
+    pub fn options(&self) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host(self.host.as_str())
+            .ssl_mode(PgSslMode::VerifyFull)
+            .ssl_root_cert(self.cert.get_path_of(CertFileType::Ca))
+            .ssl_client_key(self.cert.get_path_of(CertFileType::Key))
+            .ssl_client_cert(self.cert.get_path_of(CertFileType::Cert))
     }
 }

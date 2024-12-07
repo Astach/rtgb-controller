@@ -1,7 +1,7 @@
 FROM nats:2.10-alpine3.20
 RUN mkdir -p /certs
 
-COPY server.conf /etc/nats/server.conf
+COPY docker/nats/server.conf /etc/nats/server.conf
 COPY certs/server/server.crt /certs/
 COPY certs/server/server.key /certs/
 COPY certs/ca.crt /certs/
