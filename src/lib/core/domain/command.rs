@@ -1,8 +1,9 @@
-use uuid::{Timestamp, Uuid};
+use time::OffsetDateTime;
+use uuid::Uuid;
 
 pub struct CommandMessage {
     id: Uuid,
-    sent_at: Timestamp,
+    sent_at: OffsetDateTime,
     version: u16,
     command_type: CommandType,
 }

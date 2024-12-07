@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use uuid::{Timestamp, Uuid};
+use uuid::Uuid;
 
 use crate::core::port::messaging::MessageDrivenPort;
 

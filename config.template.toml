@@ -14,9 +14,11 @@ root_ca_file_name = "ca.cert"
 
 
 [postgres]
-name = "db-name"
-host = "127.0.0.0"
+database = "db_name"
+username = "user_name"
+host = "127.0.0.1"
 port = 5432
+tables = ["table_name"]
 
 [postgres.cert]
 absolute_folder_path = "/home/certs"

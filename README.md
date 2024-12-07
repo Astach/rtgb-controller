@@ -49,31 +49,30 @@ _DATA_
 
 2. Generate CA private key and certificate
 
-```
+```bash
 openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
     -keyout ca.key -out ca.crt \
     -subj "/CN=RTGB CA/O=My Organization/C=US"
-#### Client side
 ```
 
 #### Client side
 
 1. Generate client private key
 
-```
+```bash
 openssl genrsa -out client/client.key 4096
 ```
 
 2. Generate client Certificate Signing Request (CSR)
 
-```
+```bash
 openssl req -new -key client/client.key -out client/client.csr \
     -subj "/CN=RTGB/O=My Organization/C=US"
 ```
 
 3. Sign client certificate with CA
 
-```
+```bash
 openssl x509 -req -days 365 -in client/client.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
     -out client/client.crt
@@ -81,7 +80,7 @@ openssl x509 -req -days 365 -in client/client.csr \
 
 4. Set permissions
 
-```
+```bash
 chmod 600 *.key
 chmod 644 *.crt
 ```
@@ -90,25 +89,26 @@ chmod 644 *.crt
 
 1. Generate server private key
 
-```
+```bash
 openssl genrsa -out server/server.key 4096
 ```
 
 2. Generate server Certificate Signing Request (CSR)
 
-```
+```bash
 openssl req -new -key server/server.key -out server/server.csr \
     -subj "/CN=RTGB/O=My Organization/C=US" \
-    -addext "subjectAltName = DNS:localhost,DNS:nats-server,IP:127.0.0.1"
+    -addext "subjectAltName = DNS:localhost,IP:127.0.0.1"
 ```
 
 3. Sign server certificate with CA
 
-```
-openssl x509 -req -days 365 -in server/server.csr \
+```bash
+ echo $"subjectAltName=DNS:localhost,IP:127.0.0.1" |
+ openssl x509 -req -days 365 -in server/server.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
     -out server/server.crt \
-    -extfile <(printf "subjectAltName=DNS:localhost,DNS:nats-server,IP:127.0.0.1")
+    -extfile /dev/stdin
 ```
 
 ### NATS
@@ -131,12 +131,22 @@ tls {
 
 1. Install nats cli and export the following variables
 
-```
+```bash
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
 export NATS_KEY=/path/to/certs/client.key
 export NATS_TLS_VERIFY=true
+```
+
+or using nushell
+
+```nushell
+ export-env { $env.NATS_URL = 'nats://localhost:4222' }
+ export-env { $env.NATS_CA = '/path/to/certs/ca.crt' }
+ export-env { $env.NATS_CERT = '/path/to/certs/client.crt' }
+ export-env { $env.NATS_KEY = '/path/to/certs/client.key' }
+ export-env { $env.NATS_TLS_VERIFY = true }
 ```
 
 2. Launch the nats server using `docker compose up`
@@ -152,6 +162,7 @@ export NATS_TLS_VERIFY=true
 ### Service Configuration
 
 1. Create a `config.toml` file at `./config.toml` by using `./config.template.toml` and this the values accordingly
+2. Run the app `RUST_LOG=debug cargo run`
 
 ## Rules
 
@@ -180,3 +191,42 @@ The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this
   - AttributesID
   - Value
   - Target
+
+## FAQ
+
+- Access the pg container `docker exec -it <container_id>  /bin/bash`
+- Access the scheduler database:
+
+```bash
+psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-full sslcert=certs/client/client.crt sslkey=certs/client/client.key sslrootcert=certs/ca.crt"
+```
+
+- Unable to parse the json received via Nats subject: make sure to wrap your payload with single quote (`'`) not doubles (`"`)
+  e.g. :
+
+```nushell
+nats publish fermentation.schedule.command ('{
+∙     "id": "550e8400-e29b-41d4-a716-446655440000",
+∙     "sent_at": "2024-12-15T12:34:56Z",
+∙     "version": 1,
+∙     "type": "Schedule",
+∙     "data": {
+∙         "session_id": "486190da-9691-4e52-b085-7e270829766b",
+∙         "steps": [
+∙             {
+∙                 "target_temperature": 68,
+∙                 "duration": 24,
+∙                 "rate": {
+∙                     "value": 10,
+∙                     "frequency": 5
+∙                 }
+∙             },
+∙             {
+∙                 "target_temperature": 65,
+∙                 "duration": 48,
+∙                 "rate": null
+∙             }
+∙         ]
+∙     }
+∙ }')
+```
