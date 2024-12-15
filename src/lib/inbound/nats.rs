@@ -2,11 +2,12 @@ use anyhow::{Context, Result};
 use futures::future::BoxFuture;
 use rustls::{ClientConfig, RootCertStore};
 
-use crate::config::NatsConfig;
 use async_nats::{
     jetstream::{self, stream},
     ConnectOptions, SubscribeError, Subscriber,
 };
+
+use crate::config::nats_config::NatsConfig;
 
 pub struct Nats {
     nats_config: NatsConfig,

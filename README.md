@@ -45,71 +45,78 @@ _DATA_
 
 ### For testing and development purposes, generate a self signed certificate
 
-0. Create a folder certs and a folder certs/server and certs/client
+1. Create the following folders `certs`, `certs/server` and `certs/client`
 
-1. Client side
-   a. Generate CA private key and certificate
+2. Generate CA private key and certificate
 
-```
+```bash
 openssl req -x509 -nodes -newkey rsa:4096 -days 365 \
     -keyout ca.key -out ca.crt \
-    -subj "/CN=NATS CA/O=My Organization/C=US"
+    -subj "/CN=RTGB CA/O=My Organization/C=US"
 ```
 
-b. Generate client private key
+#### Client side
 
-```
+1. Generate client private key
+
+```bash
 openssl genrsa -out client/client.key 4096
 ```
 
-c. Generate client Certificate Signing Request (CSR)
+2. Generate client Certificate Signing Request (CSR)
 
-```
+```bash
 openssl req -new -key client/client.key -out client/client.csr \
-    -subj "/CN=nats-client/O=My Organization/C=US"
+    -subj "/CN=RTGB/O=My Organization/C=US"
 ```
 
-d. Sign client certificate with CA [!CAUTION]
+3. Sign client certificate with CA
 
-```
+```bash
 openssl x509 -req -days 365 -in client/client.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
     -out client/client.crt
 ```
 
-e. Set permissions
+4. Set permissions
 
-```
+```bash
 chmod 600 *.key
 chmod 644 *.crt
 ```
 
-2. Server side
+#### Server side
 
-a. Generate server private key
+1. Generate server private key
 
-```
+```bash
 openssl genrsa -out server/server.key 4096
 ```
 
-b. Generate server Certificate Signing Request (CSR)
+2. Generate server Certificate Signing Request (CSR)
 
-```
+```bash
 openssl req -new -key server/server.key -out server/server.csr \
-    -subj "/CN=localhost/O=My Organization/C=US" \
-    -addext "subjectAltName = DNS:localhost,DNS:nats-server,IP:127.0.0.1"
+    -subj "/CN=RTGB/O=My Organization/C=US" \
+    -addext "subjectAltName = DNS:localhost,IP:127.0.0.1"
 ```
 
-c. Sign server certificate with CA
+3. Sign server certificate with CA
 
-```
-openssl x509 -req -days 365 -in server/server.csr \
+```bash
+ echo $"subjectAltName=DNS:localhost,IP:127.0.0.1" |
+ openssl x509 -req -days 365 -in server/server.csr \
     -CA ca.crt -CAkey ca.key -CAcreateserial \
     -out server/server.crt \
-    -extfile <(printf "subjectAltName=DNS:localhost,DNS:nats-server,IP:127.0.0.1")
+    -extfile /dev/stdin
 ```
 
-e. Add the server conf
+### NATS
+
+#### Configuration
+
+1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill the NATS values
+2. Add/Edit the nats server conf at `/docker/nats/server.conf`
 
 ```
 tls {
@@ -120,11 +127,11 @@ tls {
 }
 ```
 
-### NATS
+#### Usage
 
 1. Install nats cli and export the following variables
 
-```
+```bash
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
@@ -132,17 +139,45 @@ export NATS_KEY=/path/to/certs/client.key
 export NATS_TLS_VERIFY=true
 ```
 
+or using nushell
+
+```nushell
+ export-env { $env.NATS_URL = 'nats://localhost:4222' }
+ export-env { $env.NATS_CA = '/path/to/certs/ca.crt' }
+ export-env { $env.NATS_CERT = '/path/to/certs/client.crt' }
+ export-env { $env.NATS_KEY = '/path/to/certs/client.key' }
+ export-env { $env.NATS_TLS_VERIFY = true }
+```
+
 2. Launch the nats server using `docker compose up`
 3. Send a message `nats publish <subject> <message>`
 4. Subscribe to subject `nats subscribe <subject>`
 
+### Postgres
+
+1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill the POSTGRES values
+2. Add/Edit the posgresql conf at `/docker/postgres/postgresql.conf`
+3. Add/Edit the hba conf at `/docker/postgres/pg_hba.conf`
+
+### Service Configuration
+
+1. Create a `config.toml` file at `./config.toml` by using `./config.template.toml` and this the values accordingly
+2. Run the app `RUST_LOG=debug cargo run`
+
 ## Rules
+
+### Events
+
+- You can find the documentation for the schedule events received from the API [there](https://github.com/Astach/rtgb?tab=readme-ov-file#command-description).
+- You can fine the documentation for the events reveived from MQTT [there](). //TODO
+
+### Scheduling Command
 
 - The first command must be a `StartFermentation` command
 - The last command must be a `StopFermentation` command
 - There can be only one `StartFermentation` and one `StopFermentation` command
 
-The commands are sent over MQTT using MATTER protocol this means the payload is sent using protobuf.
+The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this means the payload is sent using protobuf.
 
 - HEADER: Contains message metadata
 
@@ -156,3 +191,42 @@ The commands are sent over MQTT using MATTER protocol this means the payload is 
   - AttributesID
   - Value
   - Target
+
+## FAQ
+
+- Access the pg container `docker exec -it <container_id>  /bin/bash`
+- Access the scheduler database:
+
+```bash
+psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-full sslcert=certs/client/client.crt sslkey=certs/client/client.key sslrootcert=certs/ca.crt"
+```
+
+- Unable to parse the json received via Nats subject: make sure to wrap your payload with single quote (`'`) not doubles (`"`)
+  e.g. :
+
+```nushell
+nats publish fermentation.schedule.command ('{
+∙     "id": "550e8400-e29b-41d4-a716-446655440000",
+∙     "sent_at": "2024-12-15T12:34:56Z",
+∙     "version": 1,
+∙     "type": "Schedule",
+∙     "data": {
+∙         "session_id": "486190da-9691-4e52-b085-7e270829766b",
+∙         "steps": [
+∙             {
+∙                 "target_temperature": 68,
+∙                 "duration": 24,
+∙                 "rate": {
+∙                     "value": 10,
+∙                     "frequency": 5
+∙                 }
+∙             },
+∙             {
+∙                 "target_temperature": 65,
+∙                 "duration": 48,
+∙                 "rate": null
+∙             }
+∙         ]
+∙     }
+∙ }')
+```

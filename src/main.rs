@@ -1,8 +1,18 @@
+use anyhow::Result;
 use async_nats::jetstream;
-use futures::TryStreamExt;
-use internal::{config::Config, inbound::nats::Nats, utils::pem::PemUtils};
+use futures::{StreamExt, TryStreamExt};
+use internal::{
+    config::config::Config,
+    core::{port::messaging::MessageDriverPort, service::message_service::MessageService},
+    inbound::{model::event::Event, nats::Nats},
+    outbound::postgres::MessageRepository,
+    utils::pem::PemUtils,
+};
+use log::{debug, error};
+use sqlx::postgres::PgPoolOptions;
 #[tokio::main]
 async fn main() -> Result<(), async_nats::Error> {
+    env_logger::init();
     PemUtils::init_provider();
     let conf = Config::load("config.toml").unwrap();
     let nats = Nats::new(conf.nats).unwrap();
@@ -10,29 +20,28 @@ async fn main() -> Result<(), async_nats::Error> {
     let context = jetstream::new(client.clone());
     let consumer = nats.create_consumer(context).await?;
 
+    let pool = PgPoolOptions::new()
+        .connect_with(conf.postgres.options())
+        .await?;
+    let message_repository = MessageRepository::new(&pool);
+    let message_service = MessageService::new(message_repository);
+
     loop {
         let mut messages = consumer.messages().await?;
         while let Some(message) = messages.try_next().await? {
-            println!(
-                "Received message: {}",
-                String::from_utf8_lossy(&message.payload)
-            );
+            match Event::try_from(&message)
+                .map(|event| event.to_domain())?
+                .map(|msg| message_service.process(msg))
+            {
+                Ok(_) => {
+                    debug!("Processed incoming nats msg")
+                }
+                Err(e) => {
+                    error!("Unable to process event {:?}", e)
+                }
+            }
+
             message.ack().await?;
         }
     }
-    //     let subs = nats.subscribe(&client).await;
-    //     match subs.await {
-    //         Ok(s) => process_messages(s).await,
-    //         Err(e) => {
-    //             eprint!("Shit happened {:?}", e)
-    //         }
-    //     }
-    //
-    //     async fn process_messages(mut subscriber: async_nats::Subscriber) {
-    //         // Process each message
-    //         while let Some(message) = subscriber.next().await {
-    //             println!("Received message: {:?}", message);
-    //             subscriber.ack(message);
-    //         }
-    //     }
 }

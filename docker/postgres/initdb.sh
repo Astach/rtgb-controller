@@ -1,0 +1,22 @@
+#!/bin/bash
+psql -v ON_ERROR_STOP=1 <<-EOSQL
+	CREATE DATABASE ${POSTGRES_RTGB_DB}; 
+
+	  \c ${POSTGRES_RTGB_DB}
+
+	CREATE USER ${POSTGRES_SERVICE_USER};
+
+	  CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEDULE_TABLE_NAME} (
+	      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+	      uuid UUID UNIQUE NOT NULL,
+	      command_id UUID UNIQUE NOT NULL,
+	      session_id UUID UNIQUE NOT NULL,
+	      target_id VARCHAR(250) UNIQUE NOT NULL,
+	      command_type VARCHAR(250) CHECK (command_type IN ('StartFermentation', 'StopFermentation', 'IncreaseTemperature', 'DecreaseTemperature')) NOT NULL,
+	      value NUMERIC(2,1) NOT NULL,
+	      created_at TIMESTAMP NOT NULL DEFAULT now(),
+	      updated_at TIMESTAMP NOT NULL DEFAULT now()
+	  );
+
+	GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE ${POSTGRES_SCHEDULE_TABLE_NAME} TO ${POSTGRES_SERVICE_USER};
+EOSQL

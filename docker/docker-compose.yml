@@ -1,0 +1,59 @@
+name: "rtgb-scheduler"
+
+networks:
+  shared-network: #Referenced in the API's Dockerfile as well so that the API can send commands to the scheduler.
+    name: shared-network
+    external: false
+services:
+  nats:
+    build:
+      context: ..
+      dockerfile: docker/nats/Dockerfile
+
+    container_name: nats
+    command:
+      - "--jetstream"
+      - "--http_port=8222"
+      - "--debug=true"
+      - "--trace=true"
+      - "--config=/etc/nats/server.conf"
+    networks:
+      - shared-network
+    ports:
+      - "4222:4222" # Client connections
+      - "6222:6222" # Clustering
+      - "8222:8222" # HTTP monitoring
+    volumes:
+      - nats-data:/data
+      - nats-config:/etc/nats
+    environment:
+      - NATS_SERVER_NAME=${NATS_SERVER_NAME}
+      - NATS_USERNAME=${NATS_USERNAME}
+      - NATS_PASSWORD=${NATS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8222/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  postgres:
+    build:
+      context: ..
+      dockerfile: docker/postgres/Dockerfile
+    container_name: postgres
+    networks:
+      - shared-network
+    environment:
+      - POSTGRES_SERVICE_USER=${POSTGRES_SERVICE_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
+      - POSTGRES_RTGB_DB=${POSTGRES_RTGB_DB}
+      - POSTGRES_SCHEDULE_TABLE_NAME=${POSTGRES_SCHEDULE_TABLE_NAME}
+    ports:
+      - "5432:5432"
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  nats-data:
+  nats-config:
+  postgres-data:
