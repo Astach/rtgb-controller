@@ -1,7 +1,10 @@
 use anyhow::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
-use std::fs::{self};
+use std::{
+    fs::{self},
+    path::Path,
+};
 use thiserror::Error;
 
 use crate::utils::{file::FileUtils, pem::PemUtils};
@@ -9,14 +12,16 @@ use crate::utils::{file::FileUtils, pem::PemUtils};
 use super::{nats_config::NatsConfig, postgres_config::PostgresConfig};
 
 #[derive(Deserialize)]
-pub struct Config {
+pub struct AppConfig {
     pub nats: NatsConfig,
     pub postgres: PostgresConfig,
 }
 
-impl Config {
-    pub fn load(file_name: &str) -> Result<Config, ConfigError> {
-        let content = fs::read_to_string(file_name)?;
+impl AppConfig {
+    pub fn load(file_name: &str) -> Result<AppConfig, ConfigError> {
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let file_path = Path::new(project_root).join(file_name);
+        let content = fs::read_to_string(file_path)?;
         Ok(toml::from_str(&content)?)
     }
 }

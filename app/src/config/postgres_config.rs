@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
-use super::config::{CertConfig, CertFileType};
+use super::app_config::{CertConfig, CertFileType};
 
 #[derive(Deserialize)]
 pub struct PostgresConfig {

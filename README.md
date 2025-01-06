@@ -161,7 +161,7 @@ or using nushell
 
 ### Service Configuration
 
-1. Create a `config.toml` file at `./config.toml` by using `./config.template.toml` and this the values accordingly
+1. Create a `config.toml` file at `./app/config.toml` by using `./app/config.template.toml` and this the values accordingly
 2. Run the app `RUST_LOG=debug cargo run`
 
 ## Rules
