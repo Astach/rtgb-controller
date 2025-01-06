@@ -1,4 +1,5 @@
 use anyhow::Result;
+use mockall::automock;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 use std::{
@@ -33,7 +34,7 @@ pub enum ConfigError {
     TomlError(#[from] toml::de::Error),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default, Clone)]
 pub struct CertConfig {
     absolute_folder_path: String,
     key_file_name: String,
@@ -47,28 +48,60 @@ pub enum CertFileType {
     Ca,
 }
 
-impl CertConfig {
-    pub fn get_path_of(&self, cert_type: CertFileType) -> String {
+pub trait CertificateProvider {
+    fn get_path_of(&self, cert_type: CertFileType) -> String;
+    fn private_key(&self) -> Result<PrivateKeyDer<'static>>;
+    fn certificate(&self) -> Result<CertificateDer<'static>>;
+    fn root_ca(&self) -> Result<CertificateDer<'static>>;
+}
+
+#[automock]
+impl CertificateProvider for CertConfig {
+    fn get_path_of(&self, cert_type: CertFileType) -> String {
         match cert_type {
             CertFileType::Ca => format!("{}/{}", self.absolute_folder_path, self.root_ca_file_name),
             CertFileType::Cert => format!("{}/{}", self.absolute_folder_path, self.cert_file_name),
             CertFileType::Key => format!("{}/{}", self.absolute_folder_path, self.key_file_name),
         }
     }
-    pub fn private_key(&self) -> Result<PrivateKeyDer<'static>> {
+    fn private_key(&self) -> Result<PrivateKeyDer<'static>> {
         let key_path = self.get_path_of(CertFileType::Key);
         let key_data = FileUtils::load(&key_path).unwrap();
         PemUtils::parse_private_key(key_data)
     }
 
-    pub fn certificate(&self) -> Result<CertificateDer<'static>> {
+    fn certificate(&self) -> Result<CertificateDer<'static>> {
         let cert_path = self.get_path_of(CertFileType::Cert);
         let cert_data = FileUtils::load(&cert_path).unwrap();
         PemUtils::parse_certificate(cert_data)
     }
-    pub fn root_ca(&self) -> Result<CertificateDer<'static>> {
+
+    fn root_ca(&self) -> Result<CertificateDer<'static>> {
         let ca_path = self.get_path_of(CertFileType::Ca);
         let ca_data = FileUtils::load(&ca_path).unwrap();
         PemUtils::parse_certificate(ca_data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_load_app_config() {
+        let config = AppConfig::load("config.toml");
+        assert!(config.is_ok())
+    }
+    #[test]
+    fn should_return_correct_cert_file_path() {
+        let cert_conf = CertConfig {
+            absolute_folder_path: String::from("path"),
+            key_file_name: String::from("key"),
+            cert_file_name: String::from("cert"),
+            root_ca_file_name: String::from("ca"),
+        };
+        assert_eq!(cert_conf.get_path_of(CertFileType::Cert), "path/cert");
+        assert_eq!(cert_conf.get_path_of(CertFileType::Key), "path/key");
+        assert_eq!(cert_conf.get_path_of(CertFileType::Ca), "path/ca");
     }
 }

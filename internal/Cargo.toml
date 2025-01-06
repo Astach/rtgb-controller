@@ -16,3 +16,6 @@ log.workspace = true
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true

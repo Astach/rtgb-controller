@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use super::app_config::CertConfig;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default, Clone)]
 pub struct NatsConfig {
     pub host: String,
     pub port: u16,
@@ -10,7 +10,7 @@ pub struct NatsConfig {
     pub consumer: ConsumerConfig,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default, Clone)]
 pub struct ConsumerConfig {
     pub subjects: Vec<String>,
     pub delivery_subject: String,
