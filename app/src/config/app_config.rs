@@ -9,13 +9,13 @@ use crate::utils::{file::FileUtils, pem::PemUtils};
 use super::{nats_config::NatsConfig, postgres_config::PostgresConfig};
 
 #[derive(Deserialize)]
-pub struct Config {
+pub struct AppConfig {
     pub nats: NatsConfig,
     pub postgres: PostgresConfig,
 }
 
-impl Config {
-    pub fn load(file_name: &str) -> Result<Config, ConfigError> {
+impl AppConfig {
+    pub fn load(file_name: &str) -> Result<AppConfig, ConfigError> {
         let content = fs::read_to_string(file_name)?;
         Ok(toml::from_str(&content)?)
     }

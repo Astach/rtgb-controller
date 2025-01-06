@@ -4,4 +4,15 @@ name = "internal"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "internal"
+path = "src/lib.rs"
+
 [dependencies]
+anyhow.workspace = true
+env_logger.workspace = true
+futures.workspace = true
+log.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true

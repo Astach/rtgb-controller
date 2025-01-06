@@ -1,16 +1,7 @@
-[package]
-name = "rtgb-controller"
-version = "0.1.0"
-edition = "2021"
-
 [workspace]
-members = ["internal", "app"]
+members = ["app", "internal"]
 
-[lib]
-name = "internal"
-path = "internal/src/lib.rs"
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.93"
 env_logger = "0.11.5"
 futures = "0.3.31"

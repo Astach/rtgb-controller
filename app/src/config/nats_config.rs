@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::config::CertConfig;
+use super::app_config::CertConfig;
 
 #[derive(Deserialize)]
 pub struct NatsConfig {

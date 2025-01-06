@@ -6,7 +6,7 @@ use serde_json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::core::domain::{
+use internal::core::domain::{
     self,
     message::{FermentationStep, Rate, ScheduleMessageData},
 };

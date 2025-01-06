@@ -1,19 +1,25 @@
+mod config;
+mod inbound;
+mod outbound;
+mod utils;
 use anyhow::Result;
 use async_nats::jetstream;
-use config;
+use config::app_config::AppConfig;
 use futures::{StreamExt, TryStreamExt};
+use inbound::model::event::Event;
+use inbound::nats::Nats;
 use internal::core::{
     port::messaging::MessageDriverPort, service::message_service::MessageService,
 };
 use log::{debug, error};
-use pem::PemUtils;
-use postgres::MessageRepository;
+use outbound::postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
+use utils::pem::PemUtils;
 #[tokio::main]
 async fn main() -> Result<(), async_nats::Error> {
     env_logger::init();
     PemUtils::init_provider();
-    let conf = Config::load("config.toml").unwrap();
+    let conf = AppConfig::load("config.toml").unwrap();
     let nats = Nats::new(conf.nats).unwrap();
     let client = nats.connect().await.unwrap();
     let context = jetstream::new(client.clone());

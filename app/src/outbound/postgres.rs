@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::core::port::messaging::MessageDrivenPort;
+use internal::core::port::messaging::MessageDrivenPort;
 
 pub struct MessageRepository<'a> {
     pool: &'a PgPool,
