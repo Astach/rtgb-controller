@@ -2,10 +2,11 @@ mod config;
 mod inbound;
 mod outbound;
 mod utils;
+
 use anyhow::Result;
 use async_nats::jetstream;
 use config::app_config::AppConfig;
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use inbound::model::event::Event;
 use inbound::nats::Nats;
 use internal::core::{
