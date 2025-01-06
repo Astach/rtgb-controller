@@ -1,14 +1,13 @@
 use anyhow::Result;
 use async_nats::jetstream;
+use config;
 use futures::{StreamExt, TryStreamExt};
-use internal::{
-    config::config::Config,
-    core::{port::messaging::MessageDriverPort, service::message_service::MessageService},
-    inbound::{model::event::Event, nats::Nats},
-    outbound::postgres::MessageRepository,
-    utils::pem::PemUtils,
+use internal::core::{
+    port::messaging::MessageDriverPort, service::message_service::MessageService,
 };
 use log::{debug, error};
+use pem::PemUtils;
+use postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
 #[tokio::main]
 async fn main() -> Result<(), async_nats::Error> {
