@@ -32,3 +32,8 @@ time.workspace = true
 toml.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
+mockall_double.workspace = true
+rcgen = "0.13.2"
