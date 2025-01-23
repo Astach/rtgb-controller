@@ -2,17 +2,19 @@ name: Test
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+      - name: Create dummy config file
+        run: |
+          cp app/config.template.toml app/config.toml
+      - name: Run tests
+        run: cargo test --verbose

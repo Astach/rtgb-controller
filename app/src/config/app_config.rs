@@ -89,9 +89,9 @@ mod tests {
 
     #[test]
     fn should_load_app_config() {
-        let config = AppConfig::load("config.toml");
-        assert!(config.is_ok())
+        AppConfig::load("config.toml").unwrap();
     }
+
     #[test]
     fn should_return_correct_cert_file_path() {
         let cert_conf = CertConfig {

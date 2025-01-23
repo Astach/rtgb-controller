@@ -23,7 +23,7 @@ pub struct Event {
 }
 #[derive(Deserialize, Serialize, Debug)]
 pub struct EventData {
-    session_id: String,
+    session_id: Uuid,
 
     steps: Vec<FermentationStepData>,
 }
@@ -52,27 +52,26 @@ impl TryFrom<&async_nats::jetstream::Message> for Event {
 }
 
 impl Event {
-    pub fn to_domain(self) -> Result<domain::message::Message> {
-        Self::types(self.event_type, self.data).map(|msg_type| domain::message::Message {
+    pub fn to_domain(&self) -> Result<domain::message::Message> {
+        Self::types(self.event_type.as_str(), &self.data).map(|msg_type| domain::message::Message {
             id: self.id,
             sent_at: self.sent_at,
             version: self.version,
             message_type: msg_type,
         })
     }
-    fn types(raw_type: String, data: EventData) -> Result<domain::message::MessageType> {
+    fn types(raw_type: &str, data: &EventData) -> Result<domain::message::MessageType> {
         match raw_type.to_lowercase().as_str() {
             "schedule" => Ok(domain::message::MessageType::Schedule(
                 ScheduleMessageData {
-                    session_id: Uuid::from_str(data.session_id.as_str())
-                        .context("Invalid session ID")?,
-                    steps: Self::steps(data.steps),
+                    session_id: data.session_id,
+                    steps: Self::steps(&data.steps),
                 },
             )),
             _ => Err(anyhow!("Unknown message type: {}", raw_type)),
         }
     }
-    fn steps(steps: Vec<FermentationStepData>) -> Vec<FermentationStep> {
+    fn steps(steps: &[FermentationStepData]) -> Vec<FermentationStep> {
         steps
             .iter()
             .map(|step| FermentationStep {
@@ -84,5 +83,98 @@ impl Event {
                 }),
             })
             .collect()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use time::OffsetDateTime;
+    use uuid::Uuid;
+
+    use crate::inbound::model::event::{FermentationStepData, RateData};
+
+    use super::{Event, EventData};
+
+    #[test]
+    fn should_map_event_to_message() {
+        let event_data = EventData {
+            session_id: Uuid::new_v4(),
+            steps: vec![FermentationStepData {
+                target_temperature: 21,
+                duration: 1,
+                rate: None,
+            }],
+        };
+        let event = Event {
+            id: Uuid::new_v4(),
+            sent_at: OffsetDateTime::now_utc(),
+            version: 1,
+            event_type: "schedule".to_string(),
+            data: event_data,
+        };
+        let msg = event.to_domain().unwrap();
+        assert_eq!(msg.sent_at, event.sent_at);
+        assert_eq!(msg.version, event.version);
+        assert_eq!(msg.id, event.id);
+    }
+
+    #[test]
+    fn should_map_event_type_to_message_type() {
+        let event_data = EventData {
+            session_id: Uuid::new_v4(),
+            steps: vec![FermentationStepData {
+                target_temperature: 21,
+                duration: 1,
+                rate: None,
+            }],
+        };
+        Event::types("schedule", &event_data).unwrap();
+        Event::types("SchEdule", &event_data).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn should_be_err_on_invalid_event_type() {
+        let event_data = EventData {
+            session_id: Uuid::new_v4(),
+            steps: vec![FermentationStepData {
+                target_temperature: 21,
+                duration: 1,
+                rate: None,
+            }],
+        };
+        Event::types("takeovertheworld", &event_data).unwrap();
+    }
+    #[test]
+    fn should_map_event_step_to_fermentation_step() {
+        let step_data = vec![
+            FermentationStepData {
+                target_temperature: 21,
+                duration: 1,
+                rate: None,
+            },
+            FermentationStepData {
+                target_temperature: 22,
+                duration: 2,
+                rate: Some(RateData {
+                    value: 1,
+                    frequency: 1,
+                }),
+            },
+        ];
+        Event::steps(&step_data)
+            .iter()
+            .enumerate()
+            .for_each(|(i, step)| {
+                assert_eq!(step.duration, step_data[i].duration);
+                assert_eq!(step.target_temperature, step_data[i].target_temperature);
+                match (&step.rate, &step_data[i].rate) {
+                    (None, None) => {} // Pass
+                    (Some(r), Some(rd)) => {
+                        assert_eq!(r.value, rd.value);
+                        assert_eq!(r.frequency, rd.frequency);
+                    }
+                    _ => panic!("Mismatched Rate options value"),
+                }
+            });
     }
 }
