@@ -17,6 +17,7 @@ pub enum MessageType {
 #[derive(Debug)]
 pub struct ScheduleMessageData {
     pub session_id: Uuid,
+    pub hardwares: Vec<Hardware>,
     pub steps: Vec<FermentationStep>,
 }
 
@@ -31,4 +32,15 @@ pub struct FermentationStep {
 pub struct Rate {
     pub value: u8,
     pub frequency: u8,
+}
+
+#[derive(Debug)]
+pub enum HardwareType {
+    Cooling,
+    Heating,
+}
+#[derive(Debug)]
+pub struct Hardware {
+    pub hardware_type: HardwareType,
+    pub id: String,
 }

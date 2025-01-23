@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant API
+    participant ADB as API Posgres DB 
+    participant Scheduler
+    participant SDB as Scheduler Posgres DB
+    participant Quest DB
+    participant MQTT as Nats MQTT Bridge
+    participant Chamber
+    participant QuestDB
+
+
+    API->>Scheduler: Send Command to schedule a fermentation session
+    Scheduler ->> Scheduler: Convert events into Commands
+    Scheduler->>SDB: Save commands
+    loop On event or command received
+        Scheduler ->> SDB: Check if a command must be fired
+        Scheduler ->> MQTT: Send Control command
+        MQTT ->> Chamber: Publish command to hardware target ( Shellies)
+        Chamber -->> MQTT: Send publish event
+        MQTT -->> Scheduler : Send control event
+        Scheduler ->> SDB: Update command status
+    end 
+    Scheduler -->> API: Send Schedule event
+     Note over Scheduler,API: Only if the command fired is for a new fermentation step
+    API ->> ADB: Save new current running fermentation step for a session
+    Chamber -->> API: Send Hydrometer information
+     Note over Chamber,API: Over Http most likely
+    API ->> QuestDB: Store tracking information
+     Note over API, QuestDB: ABV, Gravity, Temperature, Reading Time
+    API ->> Scheduler: Send tracking event
+     Note over API, Scheduler: Temperature and session id, required to know if a command reached its target value
+
+   
+    

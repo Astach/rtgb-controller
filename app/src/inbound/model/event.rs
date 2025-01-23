@@ -1,17 +1,15 @@
-use std::str::FromStr;
-
-use anyhow::{anyhow, Context, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::{anyhow, Result};
+use serde::Deserialize;
 use serde_json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use internal::core::domain::{
     self,
-    message::{FermentationStep, Rate, ScheduleMessageData},
+    message::{FermentationStep, Hardware, HardwareType, Rate, ScheduleMessageData},
 };
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Event {
     pub id: Uuid,
     #[serde(with = "time::serde::rfc3339")]
@@ -21,22 +19,28 @@ pub struct Event {
     pub event_type: String,
     pub data: EventData,
 }
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct EventData {
     session_id: Uuid,
-
+    hardwares: Vec<HardwareData>,
     steps: Vec<FermentationStepData>,
 }
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct FermentationStepData {
     pub target_temperature: u16,
     pub duration: u8,
     pub rate: Option<RateData>,
 }
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct RateData {
     value: u8,
     frequency: u8,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HardwareData {
+    hardware_type: String,
+    id: String,
 }
 
 impl TryFrom<&async_nats::jetstream::Message> for Event {
@@ -61,15 +65,32 @@ impl Event {
         })
     }
     fn types(raw_type: &str, data: &EventData) -> Result<domain::message::MessageType> {
-        match raw_type.to_lowercase().as_str() {
+        Self::hardwares(data).map(|hws| match raw_type.to_lowercase().as_str() {
             "schedule" => Ok(domain::message::MessageType::Schedule(
                 ScheduleMessageData {
                     session_id: data.session_id,
+                    hardwares: hws,
                     steps: Self::steps(&data.steps),
                 },
             )),
             _ => Err(anyhow!("Unknown message type: {}", raw_type)),
-        }
+        })?
+    }
+    fn hardwares(data: &EventData) -> Result<Vec<Hardware>> {
+        data.hardwares
+            .iter()
+            .map(|h| match h.hardware_type.to_lowercase().as_str() {
+                "heating" => Ok(Hardware {
+                    id: h.id.to_string(),
+                    hardware_type: HardwareType::Heating,
+                }),
+                "cooling" => Ok(Hardware {
+                    id: h.id.to_string(),
+                    hardware_type: HardwareType::Cooling,
+                }),
+                _ => Err(anyhow!("Unknown hardware type: {}", h.hardware_type)),
+            })
+            .collect()
     }
     fn steps(steps: &[FermentationStepData]) -> Vec<FermentationStep> {
         steps
@@ -90,7 +111,7 @@ mod tests {
     use time::OffsetDateTime;
     use uuid::Uuid;
 
-    use crate::inbound::model::event::{FermentationStepData, RateData};
+    use crate::inbound::model::event::{FermentationStepData, HardwareData, RateData};
 
     use super::{Event, EventData};
 
@@ -98,6 +119,10 @@ mod tests {
     fn should_map_event_to_message() {
         let event_data = EventData {
             session_id: Uuid::new_v4(),
+            hardwares: vec![HardwareData {
+                id: "anId".to_string(),
+                hardware_type: "cooling".to_string(),
+            }],
             steps: vec![FermentationStepData {
                 target_temperature: 21,
                 duration: 1,
@@ -121,6 +146,10 @@ mod tests {
     fn should_map_event_type_to_message_type() {
         let event_data = EventData {
             session_id: Uuid::new_v4(),
+            hardwares: vec![HardwareData {
+                id: "anId".to_string(),
+                hardware_type: "cooling".to_string(),
+            }],
             steps: vec![FermentationStepData {
                 target_temperature: 21,
                 duration: 1,
@@ -136,6 +165,10 @@ mod tests {
     fn should_be_err_on_invalid_event_type() {
         let event_data = EventData {
             session_id: Uuid::new_v4(),
+            hardwares: vec![HardwareData {
+                id: "anId".to_string(),
+                hardware_type: "cooling".to_string(),
+            }],
             steps: vec![FermentationStepData {
                 target_temperature: 21,
                 duration: 1,
@@ -143,6 +176,23 @@ mod tests {
             }],
         };
         Event::types("takeovertheworld", &event_data).unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn should_be_err_on_invalid_hardware_type() {
+        let event_data = EventData {
+            session_id: Uuid::new_v4(),
+            hardwares: vec![HardwareData {
+                id: "anId".to_string(),
+                hardware_type: "chilling".to_string(),
+            }],
+            steps: vec![FermentationStepData {
+                target_temperature: 21,
+                duration: 1,
+                rate: None,
+            }],
+        };
+        Event::types("schedule", &event_data).unwrap();
     }
     #[test]
     fn should_map_event_step_to_fermentation_step() {
