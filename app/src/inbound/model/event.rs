@@ -27,7 +27,7 @@ pub struct EventData {
 }
 #[derive(Deserialize, Debug)]
 pub struct FermentationStepData {
-    pub target_temperature: u16,
+    pub target_temperature: u8,
     pub duration: u8,
     pub rate: Option<RateData>,
 }

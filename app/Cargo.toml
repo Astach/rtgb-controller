@@ -9,13 +9,13 @@ name = "rtgb-controller"
 path = "src/main.rs"
 
 [dependencies]
-async-nats = "0.38.0"
+async-nats = "0.39"
 internal = { path = "../internal" }
-rustls = "0.23.16"
+rustls = "0.23"
 rustls-pemfile = "2.2"
-serde = { version = "1.0.214", features = ["std", "derive"] }
-serde_json = "1.0.133"
-sqlx = { version = "0.8.2", features = [
+serde = { version = "1.0", features = ["std", "derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = [
   "runtime-tokio",
   "postgres",
   "macros",
@@ -36,4 +36,4 @@ uuid.workspace = true
 [dev-dependencies]
 mockall.workspace = true
 mockall_double.workspace = true
-rcgen = "0.13.2"
+rcgen = "0.13"

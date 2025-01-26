@@ -192,6 +192,20 @@ The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this
   - Value
   - Target
 
+### Command firing rules
+
+- When a message is converted to commands, the firing date set in the CommandStatus `Planned` is:
+- `now` if the command is `StartFermentation`
+- the date of the previous command + the duration of the step referenced by the previous command. (including rates if any)
+
+- Once a `StartFermentation`` command has been `Acknowledged`, on the next event received from the hydrometer, check if the target_temperature is reached, if yes we can consider that the step has started for its given duration, so:
+Update the firing date of every following `Planned` command by :
+- calculating the delta between the `Planned` date of the `StartFermentation` command and the date when the target_temperature has been reached
+- adding the delta to all the `Planned` command.
+
+e.g. if my chamber temp is 12 and StartFermentation step target_temperature is 20, it may take a few hours to reach this value, let's say 5h.
+it means that I have to add 5 hours to all the Planned date of the following commands.
+
 ## FAQ
 
 - Access the pg container `docker exec -it <container_id>  /bin/bash`
