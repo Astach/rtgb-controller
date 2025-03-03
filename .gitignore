@@ -17,5 +17,6 @@ Cargo.lock
 ### Certs ###
 certs/*
 .env
+.envrc
 !*.template
 config.toml

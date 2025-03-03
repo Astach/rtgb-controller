@@ -4,6 +4,7 @@ use crate::core::domain::message::{
 };
 use crate::core::port::messaging::{MessageDrivenPort, MessageDriverPort};
 use anyhow::anyhow;
+use async_trait::async_trait;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -11,8 +12,9 @@ pub struct MessageService<R: MessageDrivenPort> {
     repository: R,
 }
 
-impl<R: MessageDrivenPort> MessageDriverPort for MessageService<R> {
-    fn process(&self, message: Message) -> anyhow::Result<()> {
+#[async_trait]
+impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
+    async fn process(&self, message: Message) -> anyhow::Result<()> {
         match message.message_type {
             MessageType::Schedule(data) => {
                 let heating = data
@@ -24,7 +26,7 @@ impl<R: MessageDrivenPort> MessageDriverPort for MessageService<R> {
                     .ok_or(anyhow!("Unable to find cooling hardware"))
                     .cloned()?;
                 let cmds = self.convert_to_commands(&data)?;
-                self.save_schedule(cmds, heating, cooling).map(|_| ())
+                self.save_schedule(cmds, heating, cooling).await.map(|_| ())
             }
         }
     }
@@ -84,9 +86,15 @@ impl<R: MessageDrivenPort> MessageService<R> {
             .flat_map(|(idx, step)| {
                 step.rate.as_ref().map_or_else(
                     || {
-                        vec![self
-                            .steps_to_command_type(idx, &data.steps, step.target_temperature, None)
-                            .map(|c_type| self.build_command(data.session_id, idx as u8, c_type))]
+                        vec![
+                            self.steps_to_command_type(
+                                idx,
+                                &data.steps,
+                                step.target_temperature,
+                                None,
+                            )
+                            .map(|c_type| self.build_command(data.session_id, idx as u8, c_type)),
+                        ]
                     },
                     |rate| {
                         let delta = data.steps[idx - 1]
@@ -111,13 +119,13 @@ impl<R: MessageDrivenPort> MessageService<R> {
             })
             .collect()
     }
-    fn save_schedule(
+    async fn save_schedule(
         &self,
         commands: Vec<Command>,
         heating_h: Hardware,
         cooling_h: Hardware,
     ) -> anyhow::Result<i32> {
-        self.repository.insert(commands, heating_h, cooling_h)
+        self.repository.insert(commands, heating_h, cooling_h).await
     }
 }
 

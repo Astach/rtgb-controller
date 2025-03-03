@@ -1,4 +1,7 @@
-use sqlx::{pool, query, query_scalar, Executor, PgPool};
+use std::future::Future;
+
+use async_trait::async_trait;
+use sqlx::{Executor, PgPool, pool, query, query_scalar};
 use uuid::Uuid;
 
 use internal::core::{
@@ -10,7 +13,7 @@ use internal::core::{
 };
 
 pub struct MessageRepository<'a> {
-    pool: &'a PgPool,
+    pub pool: &'a PgPool,
 }
 
 impl<'a> MessageRepository<'a> {
@@ -19,8 +22,17 @@ impl<'a> MessageRepository<'a> {
     }
 }
 
+#[async_trait]
 impl MessageDrivenPort for MessageRepository<'_> {
     fn fetch(&self, command_id: Uuid) -> Option<Command> {
+        todo!()
+    }
+
+    fn update(&self, command_id: Uuid) -> anyhow::Result<Command> {
+        todo!()
+    }
+
+    fn delete(&self, command_id: Uuid) -> anyhow::Result<Command> {
         todo!()
     }
 
@@ -30,7 +42,6 @@ impl MessageDrivenPort for MessageRepository<'_> {
         heating_h: Hardware,
         cooling_h: Hardware,
     ) -> anyhow::Result<i32> {
-        //TODO feels weird to have heating id and cooling id in every command ?
         let c = commands
             .first()
             .ok_or(anyhow::anyhow!("No command to insert"))?;
@@ -40,20 +51,12 @@ impl MessageDrivenPort for MessageRepository<'_> {
             heating.id,
             cooling.id
         )
-        .fetch_one(&pool)
+        .fetch_one(&self.pool)
         .await;
         commands.iter().for_each(|c| {
             //            self.pool.execute_many()
             todo!();
         });
-        todo!()
-    }
-
-    fn update(&self, command_id: Uuid) -> anyhow::Result<Command> {
-        todo!()
-    }
-
-    fn delete(&self, command_id: Uuid) -> anyhow::Result<Command> {
         todo!()
     }
 }
@@ -82,13 +85,4 @@ pub struct SessionRecord {
     session_id: Uuid,
     cooling_id: String,
     heating_id: String,
-}
-impl From<Command> for NewSessionRecord {
-    fn from(value: Command) -> Self {
-        Self {
-            session_id: value.session_data.id,
-            cooling_id: value.cooling.id,
-            heating_id: value.heating.id,
-        }
-    }
 }

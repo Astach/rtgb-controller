@@ -2,7 +2,7 @@
 [package]
 name = "internal"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "internal"
@@ -10,6 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 env_logger.workspace = true
 futures.workspace = true
 log.workspace = true

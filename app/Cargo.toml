@@ -2,7 +2,7 @@
 [package]
 name = "app"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "rtgb-controller"
@@ -24,6 +24,7 @@ sqlx = { version = "0.8", features = [
 ] }
 
 anyhow.workspace = true
+async-trait.workspace = true
 env_logger.workspace = true
 futures.workspace = true
 log.workspace = true
