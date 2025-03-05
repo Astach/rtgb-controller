@@ -48,28 +48,19 @@ impl MessageDrivenPort for MessageRepository<'_> {
         let mut session_record_id = query_scalar!(
             "INSERT INTO session (uuid, cooling_id, heating_id) VALUES ($1,$2,$3) RETURNING id",
             c.session_data.id,
-            heating.id,
-            cooling.id
+            heating_h.id,
+            cooling_h.id
         )
-        .fetch_one(&self.pool)
+        .fetch_one(self.pool)
         .await;
         commands.iter().for_each(|c| {
-            //            self.pool.execute_many()
+            //            query!("INSERT INTO command (uuid, command_type)"), c.id, c.command_type, c.status, c.session_data.fermentation_step_idx, )
             todo!();
         });
         todo!()
     }
 }
 
-#[derive(sqlx::FromRow)]
-pub struct NewCommandRecord {
-    command_id: Uuid,
-    command_type: String,
-    holding_duration: u8,
-    value: u8,
-    status: String,
-    session_id: Uuid,
-}
 #[derive(sqlx::FromRow)]
 pub struct CommandRecord {
     command_id: Uuid,

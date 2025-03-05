@@ -129,9 +129,11 @@ tls {
 
 #### Usage
 
-1. Install nats cli and export the following variables
+1. Install `direnv` and create a `.envrc` file
+2. add the following variables
 
 ```bash
+export DATABASE_URL="postgres@..." # used by sqlx to check query at compile time
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
@@ -139,19 +141,10 @@ export NATS_KEY=/path/to/certs/client.key
 export NATS_TLS_VERIFY=true
 ```
 
-or using nushell
-
-```nushell
- export-env { $env.NATS_URL = 'nats://localhost:4222' }
- export-env { $env.NATS_CA = '/path/to/certs/ca.crt' }
- export-env { $env.NATS_CERT = '/path/to/certs/client.crt' }
- export-env { $env.NATS_KEY = '/path/to/certs/client.key' }
- export-env { $env.NATS_TLS_VERIFY = true }
-```
-
-2. Launch the nats server using `docker compose up`
-3. Send a message `nats publish <subject> <message>`
-4. Subscribe to subject `nats subscribe <subject>`
+3. Install `nats` cli and export the following variables
+4. Launch the nats server using `docker compose up`
+5. Send a message `nats publish <subject> <message>`
+6. Subscribe to subject `nats subscribe <subject>`
 
 ### Postgres
 
