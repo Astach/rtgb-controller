@@ -1,7 +1,7 @@
 use std::future::Future;
 
-use async_trait::async_trait;
-use sqlx::{Executor, PgPool, pool, query, query_scalar};
+use futures::{future, FutureExt};
+use sqlx::{pool, postgres::PgQueryResult, query, query_scalar, Executor, PgPool};
 use uuid::Uuid;
 
 use internal::core::{
@@ -22,7 +22,6 @@ impl<'a> MessageRepository<'a> {
     }
 }
 
-#[async_trait]
 impl MessageDrivenPort for MessageRepository<'_> {
     fn fetch(&self, command_id: Uuid) -> Option<Command> {
         todo!()
@@ -41,7 +40,7 @@ impl MessageDrivenPort for MessageRepository<'_> {
         commands: Vec<Command>,
         heating_h: Hardware,
         cooling_h: Hardware,
-    ) -> anyhow::Result<i32> {
+    ) -> anyhow::Result<u64> {
         let c = commands
             .first()
             .ok_or(anyhow::anyhow!("No command to insert"))?;
@@ -52,12 +51,31 @@ impl MessageDrivenPort for MessageRepository<'_> {
             cooling_h.id
         )
         .fetch_one(self.pool)
-        .await;
-        commands.iter().for_each(|c| {
-            //            query!("INSERT INTO command (uuid, command_type)"), c.id, c.command_type, c.status, c.session_data.fermentation_step_idx, )
-            todo!();
-        });
-        todo!()
+        .await?;
+
+        let futures  : Vec<_>= commands.iter().map(|c| {
+            query!(
+                "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value) VALUES($1,$2,$3,$4,$5,$6)", 
+                c.id, 
+                session_record_id, 
+                c.session_data.fermentation_step_idx as i32,
+                c.command_type.name(), 
+                c.command_type.holding_duration().map(|v| v as i32),
+                c.command_type.target_temp() as i32
+            )
+                .execute(self.pool)
+        }).collect();
+
+        Ok( futures::future::join_all(futures).await.iter()
+            .filter_map(|result| {
+                match result {
+                    Ok(query_result) => Some(query_result.rows_affected()),
+                    Err(_) => None,
+                }
+            })
+            .sum()
+        )
+
     }
 }
 

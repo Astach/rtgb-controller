@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value) VALUES($1,$2,$3,$4,$5,$6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "466e5c2372b79cf046f7243413e85b48bb277d1e5d72a379a416907b85817ac3"
+}

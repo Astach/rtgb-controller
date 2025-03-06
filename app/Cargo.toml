@@ -21,10 +21,10 @@ sqlx = { version = "0.8", features = [
   "macros",
   "uuid",
   "tls-native-tls",
+  "bigdecimal",
 ] }
 
 anyhow.workspace = true
-async-trait.workspace = true
 env_logger.workspace = true
 futures.workspace = true
 log.workspace = true

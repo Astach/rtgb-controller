@@ -4,7 +4,6 @@ use crate::core::domain::message::{
 };
 use crate::core::port::messaging::{MessageDrivenPort, MessageDriverPort};
 use anyhow::anyhow;
-use async_trait::async_trait;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -12,7 +11,6 @@ pub struct MessageService<R: MessageDrivenPort> {
     repository: R,
 }
 
-#[async_trait]
 impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
     async fn process(&self, message: Message) -> anyhow::Result<()> {
         match message.message_type {
@@ -124,7 +122,7 @@ impl<R: MessageDrivenPort> MessageService<R> {
         commands: Vec<Command>,
         heating_h: Hardware,
         cooling_h: Hardware,
-    ) -> anyhow::Result<i32> {
+    ) -> anyhow::Result<u64> {
         self.repository.insert(commands, heating_h, cooling_h).await
     }
 }

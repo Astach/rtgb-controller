@@ -36,6 +36,26 @@ impl CommandType {
             CommandType::StopFermentation { .. } => "StopFermentation",
         }
     }
+    pub fn holding_duration(&self) -> Option<u8> {
+        match self {
+            CommandType::StartFermentation { .. } => None,
+            CommandType::IncreaseTemperature {
+                holding_duration, ..
+            } => *holding_duration,
+            CommandType::DecreaseTemperature {
+                holding_duration, ..
+            } => *holding_duration,
+            CommandType::StopFermentation { .. } => None,
+        }
+    }
+    pub fn target_temp(&self) -> u8 {
+        match self {
+            CommandType::StartFermentation { target_temp } => *target_temp,
+            CommandType::IncreaseTemperature { target_temp, .. } => *target_temp,
+            CommandType::DecreaseTemperature { target_temp, .. } => *target_temp,
+            CommandType::StopFermentation { target_temp } => *target_temp,
+        }
+    }
 }
 
 /// Status evolves like so Planned -> Sent -> Acknowledged
