@@ -1,12 +1,11 @@
-use std::future::Future;
 
-use futures::{future, FutureExt};
-use sqlx::{pool, postgres::PgQueryResult, query, query_scalar, Executor, PgPool};
+use log::{debug, error};
+use sqlx::{ query, query_scalar, types::BigDecimal, PgPool};
 use uuid::Uuid;
 
 use internal::core::{
     domain::{
-        command::{Command, CommandType},
+        command::Command,
         message::Hardware,
     },
     port::messaging::MessageDrivenPort,
@@ -44,7 +43,7 @@ impl MessageDrivenPort for MessageRepository<'_> {
         let c = commands
             .first()
             .ok_or(anyhow::anyhow!("No command to insert"))?;
-        let mut session_record_id = query_scalar!(
+        let  session_record_id = query_scalar!(
             "INSERT INTO session (uuid, cooling_id, heating_id) VALUES ($1,$2,$3) RETURNING id",
             c.session_data.id,
             heating_h.id,
@@ -52,29 +51,34 @@ impl MessageDrivenPort for MessageRepository<'_> {
         )
         .fetch_one(self.pool)
         .await?;
-
+        debug!("Inserted session with id {session_record_id}");
         let futures  : Vec<_>= commands.iter().map(|c| {
             query!(
-                "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value) VALUES($1,$2,$3,$4,$5,$6)", 
+                "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value) VALUES ($1,$2,$3,$4,$5,$6);", 
                 c.id, 
                 session_record_id, 
                 c.session_data.fermentation_step_idx as i32,
                 c.command_type.name(), 
                 c.command_type.holding_duration().map(|v| v as i32),
-                c.command_type.target_temp() as i32
+                BigDecimal::from(c.command_type.target_temp() )
             )
                 .execute(self.pool)
         }).collect();
-
-        Ok( futures::future::join_all(futures).await.iter()
-            .filter_map(|result| {
-                match result {
-                    Ok(query_result) => Some(query_result.rows_affected()),
-                    Err(_) => None,
-                }
+        
+futures::future::join_all(futures)
+    .await
+    .into_iter()
+    .try_fold(0, |acc, result| {
+        result
+            .map_err(|e| {
+                error!("Can't execute command insert {e}");
+                anyhow::anyhow!("Can't execute command insert {}", e)
             })
-            .sum()
-        )
+            .map(|query_result| {
+                debug!("Inserted command result {:?}", query_result);
+                acc + query_result.rows_affected()
+            })
+    })
 
     }
 }
@@ -94,4 +98,24 @@ pub struct SessionRecord {
     session_id: Uuid,
     cooling_id: String,
     heating_id: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use internal::core::{domain::{command::Command, message::{Hardware, HardwareType}}, port::messaging::MessageDrivenPort};
+    use sqlx::PgPool;
+
+
+    use super::MessageRepository;
+    #[sqlx::test(migrations = "./migrations")]
+    async fn can_insert_commands(pool: PgPool) -> anyhow::Result<()>{
+    env_logger::init();
+        let repo = MessageRepository::new(&pool);
+        let cmds = vec![Command::default()];
+        let heating_h = Hardware::new(String::from("heating_id"), HardwareType::Heating);
+        let cooling_h = Hardware::new(String::from("cooling_id"), HardwareType::Cooling);
+        let result = repo.insert(cmds, heating_h, cooling_h).await;
+        assert_eq!(result.unwrap(), 1);
+        Ok(())
+    }
 }

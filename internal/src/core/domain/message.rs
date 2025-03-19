@@ -53,3 +53,9 @@ pub struct Hardware {
     pub hardware_type: HardwareType,
     pub id: String,
 }
+
+impl Hardware {
+    pub fn new(id: String, hardware_type: HardwareType) -> Self {
+        Hardware { id, hardware_type }
+    }
+}

@@ -43,6 +43,8 @@ services:
     networks:
       - shared-network
     environment:
+      - TEST_USER=${TEST_USER}
+      - TEST_USER_PASSWORD=${TEST_USER_PASSWORD}
       - POSTGRES_SERVICE_USER=${POSTGRES_SERVICE_USER}
       - POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
       - POSTGRES_RTGB_DB=${POSTGRES_RTGB_DB}

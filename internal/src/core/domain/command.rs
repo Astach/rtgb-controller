@@ -1,6 +1,7 @@
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+#[derive(Default)]
 pub struct Command {
     pub id: Uuid,
     pub sent_at: Option<OffsetDateTime>,
@@ -9,6 +10,7 @@ pub struct Command {
     pub command_type: CommandType,
     pub status: CommandStatus,
 }
+
 #[derive(Clone)]
 pub enum CommandType {
     StartFermentation {
@@ -25,6 +27,12 @@ pub enum CommandType {
     StopFermentation {
         target_temp: u8,
     },
+}
+
+impl Default for CommandType {
+    fn default() -> Self {
+        CommandType::StartFermentation { target_temp: 20 }
+    }
 }
 
 impl CommandType {
@@ -60,13 +68,18 @@ impl CommandType {
 
 /// Status evolves like so Planned -> Sent -> Acknowledged
 pub enum CommandStatus {
-    Acknowledged(OffsetDateTime), // when was it acknowledged ( used to know when to trigger the
-    // next one)
     Planned(Option<OffsetDateTime>), // we don't know when is the planned date when we create the
     // command as it depends on the finish date of the previous command if any
     Sent(OffsetDateTime),
+    Acknowledged(OffsetDateTime), // when was it acknowledged ( used to know when to trigger the
+                                  // next one
 }
-
+impl Default for CommandStatus {
+    fn default() -> Self {
+        CommandStatus::Planned(Some(OffsetDateTime::now_utc()))
+    }
+}
+#[derive(Default)]
 pub struct SessionData {
     pub id: Uuid,
     pub fermentation_step_idx: u8,

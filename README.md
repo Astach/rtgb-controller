@@ -134,12 +134,15 @@ tls {
 
 ```bash
 export DATABASE_URL="postgres@..." # used by sqlx to check query at compile time
+export TEST_DATABASE_URL="postgres://$(whoami)@localhost/rtgb_scheduler"
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
 export NATS_KEY=/path/to/certs/client.key
 export NATS_TLS_VERIFY=true
 ```
+
+**Important**: use absolute paths in your database url for certificates' path, you can use `${PWD}` e.g.: `${PWD}/certs/root.ca`.
 
 3. Install `nats` cli and export the following variables
 4. Launch the nats server using `docker compose up`
@@ -237,3 +240,6 @@ nats publish fermentation.schedule.command ('{
 ∙     }
 ∙ }')
 ```
+
+- Run unit tests:
+  `DATABASE_URL=$env.TEST_DATABASE_URL cargo test`

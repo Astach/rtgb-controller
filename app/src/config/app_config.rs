@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::debug;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 use std::{
@@ -20,6 +21,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn load(file_name: &str) -> Result<AppConfig, ConfigError> {
         let project_root = env!("CARGO_MANIFEST_DIR");
+        debug!("PATH IS {project_root}");
         let file_path = Path::new(project_root).join(file_name);
         let content = fs::read_to_string(file_path)?;
         Ok(toml::from_str(&content)?)
