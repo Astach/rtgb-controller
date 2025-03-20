@@ -1,5 +1,3 @@
-use super::command::CommandType;
-use anyhow::anyhow;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -32,7 +30,7 @@ impl ScheduleMessageData {
 
 #[derive(Debug)]
 pub struct FermentationStep {
-    pub target_temperature: u8,
+    pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<Rate>,
 }

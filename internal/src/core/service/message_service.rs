@@ -35,7 +35,7 @@ impl<R: MessageDrivenPort> MessageService<R> {
         &self,
         idx: usize,
         steps: &[FermentationStep],
-        target_temp: u8,
+        target_temp: f32,
         holding_duration: Option<u8>,
     ) -> anyhow::Result<CommandType> {
         Ok(match idx {
@@ -95,16 +95,15 @@ impl<R: MessageDrivenPort> MessageService<R> {
                         ]
                     },
                     |rate| {
-                        let delta = data.steps[idx - 1]
-                            .target_temperature
-                            .abs_diff(step.target_temperature)
-                            / rate.value;
+                        let delta = (data.steps[idx - 1].target_temperature.abs()
+                            - step.target_temperature.abs() / f32::from(rate.value))
+                            as i32;
                         (0..delta)
                             .map(|_| {
                                 self.steps_to_command_type(
                                     idx,
                                     &data.steps,
-                                    rate.value,
+                                    f32::from(rate.value),
                                     Some(rate.frequency),
                                 )
                                 .map(|c_type| {

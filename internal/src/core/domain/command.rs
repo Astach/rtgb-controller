@@ -1,4 +1,4 @@
-use time::OffsetDateTime;
+use time::{OffsetDateTime, macros::datetime};
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -14,24 +14,24 @@ pub struct Command {
 #[derive(Clone)]
 pub enum CommandType {
     StartFermentation {
-        target_temp: u8,
+        target_temp: f32,
     },
     IncreaseTemperature {
-        target_temp: u8,
+        target_temp: f32,
         holding_duration: Option<u8>, // for how long should we hold the targeted temperature once reached
     },
     DecreaseTemperature {
-        target_temp: u8,
+        target_temp: f32,
         holding_duration: Option<u8>, // for how long should we hold the targeted temperature once reached
     },
     StopFermentation {
-        target_temp: u8,
+        target_temp: f32,
     },
 }
 
 impl Default for CommandType {
     fn default() -> Self {
-        CommandType::StartFermentation { target_temp: 20 }
+        CommandType::StartFermentation { target_temp: 20.0 }
     }
 }
 
@@ -56,7 +56,7 @@ impl CommandType {
             CommandType::StopFermentation { .. } => None,
         }
     }
-    pub fn target_temp(&self) -> u8 {
+    pub fn target_temp(&self) -> f32 {
         match self {
             CommandType::StartFermentation { target_temp } => *target_temp,
             CommandType::IncreaseTemperature { target_temp, .. } => *target_temp,
@@ -74,9 +74,27 @@ pub enum CommandStatus {
     Acknowledged(OffsetDateTime), // when was it acknowledged ( used to know when to trigger the
                                   // next one
 }
+
 impl Default for CommandStatus {
     fn default() -> Self {
-        CommandStatus::Planned(Some(OffsetDateTime::now_utc()))
+        CommandStatus::Planned(None)
+    }
+}
+
+impl CommandStatus {
+    pub fn name(&self) -> &str {
+        match self {
+            CommandStatus::Planned(..) => "Planned",
+            CommandStatus::Sent(..) => "Sent",
+            CommandStatus::Acknowledged(..) => "Acknowledged",
+        }
+    }
+    pub fn date(&self) -> Option<OffsetDateTime> {
+        match self {
+            CommandStatus::Planned(offset_date_time) => *offset_date_time,
+            CommandStatus::Sent(offset_date_time) => Some(*offset_date_time),
+            CommandStatus::Acknowledged(offset_date_time) => Some(*offset_date_time),
+        }
     }
 }
 #[derive(Default)]

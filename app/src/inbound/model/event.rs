@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use serde_json;
 use time::OffsetDateTime;
@@ -27,7 +27,7 @@ pub struct EventData {
 }
 #[derive(Deserialize, Debug)]
 pub struct FermentationStepData {
-    pub target_temperature: u8,
+    pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<RateData>,
 }
@@ -124,7 +124,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
-                target_temperature: 21,
+                target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             }],
@@ -151,7 +151,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
-                target_temperature: 21,
+                target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             }],
@@ -170,7 +170,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
-                target_temperature: 21,
+                target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             }],
@@ -187,7 +187,7 @@ mod tests {
                 hardware_type: "chilling".to_string(),
             }],
             steps: vec![FermentationStepData {
-                target_temperature: 21,
+                target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             }],
@@ -198,12 +198,12 @@ mod tests {
     fn should_map_event_step_to_fermentation_step() {
         let step_data = vec![
             FermentationStepData {
-                target_temperature: 21,
+                target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             },
             FermentationStepData {
-                target_temperature: 22,
+                target_temperature: 22.0,
                 duration: 2,
                 rate: Some(RateData {
                     value: 1,
