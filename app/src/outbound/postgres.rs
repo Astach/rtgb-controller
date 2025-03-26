@@ -1,8 +1,9 @@
 
 use std::str::FromStr;
 
+use async_nats::jetstream::stream::No;
 use log::{debug, error};
-use sqlx::{query, query_scalar, types::BigDecimal, PgPool};
+use sqlx::{query, query_as, query_scalar, types::BigDecimal, PgPool};
 use time::PrimitiveDateTime;
 use uuid::Uuid;
 
@@ -25,8 +26,11 @@ impl<'a> MessageRepository<'a> {
 }
 
 impl MessageDrivenPort for MessageRepository<'_> {
-    fn fetch(&self, command_id: Uuid) -> Option<Command> {
-        todo!()
+    async fn fetch(&self, command_id: Uuid) -> Option<Command> {
+        let r : CommandRecord = query_as!("SELECT * FROM command
+                INNER JOIN session ON command.session_id = session.id
+                WHERE command.uuid = $1", command_id).fetch_one(self.pool).await?;
+        None
     }
 
     fn update(&self, command_id: Uuid) -> anyhow::Result<Command> {
@@ -55,8 +59,8 @@ impl MessageDrivenPort for MessageRepository<'_> {
         .fetch_one(self.pool)
         .await?;
         debug!("Inserted session with id {session_record_id}");
-        let futures  : Vec<_>= commands.iter().map(|c| {
-           let rec = NewCommandRecord::from_command(c, session_record_id).expect("TODO fix it") ;
+        let records = commands.iter().map(|c| NewCommandRecord::from_command(c, session_record_id)).collect::<anyhow::Result<Vec<NewCommandRecord>>>()?; 
+        let futures  : Vec<_>= records.iter().map(|rec| {
             query!(
                 "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value, status, status_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8);", 
                 rec.command_id, 
@@ -69,19 +73,19 @@ impl MessageDrivenPort for MessageRepository<'_> {
                 rec.status_date
             ).execute(self.pool)
         }).collect();
-        
-futures::future::join_all(futures)
-    .await
-    .into_iter()
-    .try_fold(0, |acc, result| {
-        result
-            .map_err(|e| {
-                anyhow::anyhow!("Can't execute command insert {}", e)
+
+        futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .try_fold(0, |acc, result| {
+                result
+                    .map_err(|e| {
+                        anyhow::anyhow!("Can't execute command insert {}", e)
+                    })
+                    .map(|query_result| {
+                        acc + query_result.rows_affected()
+                    })
             })
-            .map(|query_result| {
-                acc + query_result.rows_affected()
-            })
-    })
 
     }
 }
@@ -115,11 +119,13 @@ impl NewCommandRecord {
 
 #[derive(sqlx::FromRow)]
 pub struct CommandRecord {
-    command_id: Uuid,
-    command_type: String,
-    holding_duration: u8,
-    value: u8,
-    status: String,
+    pub command_id: Uuid,
+    pub fermentation_step_id : i32,
+    pub command_type: String,
+    pub holding_duration: i32,
+    pub value: BigDecimal,
+    pub status: String,
+    pub status_date: Option<PrimitiveDateTime>,
 }
 
 #[derive(sqlx::FromRow)]
