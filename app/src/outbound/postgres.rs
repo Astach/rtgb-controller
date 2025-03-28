@@ -1,9 +1,8 @@
 
 use std::str::FromStr;
 
-use async_nats::jetstream::stream::No;
-use log::{debug, error};
-use sqlx::{query, query_as, query_scalar, types::BigDecimal, PgPool};
+use log::debug;
+use sqlx::{query, query_scalar, types::BigDecimal, PgPool};
 use time::PrimitiveDateTime;
 use uuid::Uuid;
 
@@ -27,10 +26,7 @@ impl<'a> MessageRepository<'a> {
 
 impl MessageDrivenPort for MessageRepository<'_> {
     async fn fetch(&self, command_id: Uuid) -> Option<Command> {
-        let r : CommandRecord = query_as!("SELECT * FROM command
-                INNER JOIN session ON command.session_id = session.id
-                WHERE command.uuid = $1", command_id).fetch_one(self.pool).await?;
-        None
+        todo!()
     }
 
     fn update(&self, command_id: Uuid) -> anyhow::Result<Command> {
@@ -117,24 +113,6 @@ impl NewCommandRecord {
     } 
 }
 
-#[derive(sqlx::FromRow)]
-pub struct CommandRecord {
-    pub command_id: Uuid,
-    pub fermentation_step_id : i32,
-    pub command_type: String,
-    pub holding_duration: i32,
-    pub value: BigDecimal,
-    pub status: String,
-    pub status_date: Option<PrimitiveDateTime>,
-}
-
-#[derive(sqlx::FromRow)]
-pub struct SessionRecord {
-    id: i32,
-    session_id: Uuid,
-    cooling_id: String,
-    heating_id: String,
-}
 
 #[cfg(test)]
 mod tests {
@@ -165,12 +143,6 @@ fn should_create_new_command_record(){
         let heating_h = Hardware::new(String::from("heating_id"), HardwareType::Heating);
         let cooling_h = Hardware::new(String::from("cooling_id"), HardwareType::Cooling);
         let result = repo.insert(cmds, heating_h, cooling_h).await;
-        assert_eq!(result.unwrap(), 1);
-        Ok(())
-    }
-    async fn can_fetch_commands(pool: PgPool) -> anyhow::Result<()>{
-        let repo = MessageRepository::new(&pool);
-        let result = repo.fetch().await;
         assert_eq!(result.unwrap(), 1);
         Ok(())
     }

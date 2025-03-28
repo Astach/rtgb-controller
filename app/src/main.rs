@@ -12,7 +12,7 @@ use inbound::nats::Nats;
 use internal::core::{
     port::messaging::MessageDriverPort, service::message_service::MessageService,
 };
-use log::{debug, error};
+use log::{debug, error, info};
 use outbound::postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
 use utils::pem::PemUtils;
@@ -36,14 +36,15 @@ async fn main() -> Result<(), async_nats::Error> {
         let mut messages = consumer.messages().await?;
         while let Some(message) = messages.try_next().await? {
             match Event::try_from(&message)
-                .map(|event| event.to_domain())?
+                .and_then(|event| event.to_domain())
                 .map(|msg| message_service.process(msg))
             {
-                Ok(_) => {
-                    debug!("Processed incoming nats msg")
-                }
+                Ok(fut) => match fut.await {
+                    Ok(x) => debug!("Message Processed, {:?} commmand(s) created", x),
+                    Err(e) => error!("Unable to process event {:?}", e),
+                },
                 Err(e) => {
-                    error!("Unable to process event {:?}", e)
+                    error!("Unable to convert event into a domain message {:?}", e)
                 }
             }
 

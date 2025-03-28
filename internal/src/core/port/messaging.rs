@@ -1,16 +1,17 @@
+use anyhow::Result;
 use uuid::Uuid;
 
 use crate::core::domain::{
     command::Command,
-    message::{Hardware, Message},
+    message::{self, Hardware, Message},
 };
 
 pub trait MessageDriverPort {
-    fn process(&self, event: Message) -> impl Future<Output = anyhow::Result<()>> + Send;
+    fn process(&self, message: Message) -> impl Future<Output = anyhow::Result<u64>> + Send;
 }
 
 pub trait MessageDrivenPort {
-    fn fetch(&self, command_id: Uuid) -> Option<Command>;
+    fn fetch(&self, command_id: Uuid) -> impl Future<Output = Option<Command>> + Send;
     fn insert(
         &self,
         commands: Vec<Command>,

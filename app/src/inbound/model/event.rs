@@ -34,7 +34,7 @@ pub struct FermentationStepData {
 #[derive(Deserialize, Debug)]
 pub struct RateData {
     value: u8,
-    frequency: u8,
+    duration: u8,
 }
 
 #[derive(Deserialize, Debug)]
@@ -100,7 +100,7 @@ impl Event {
                 duration: step.duration,
                 rate: step.rate.as_ref().map(|r| Rate {
                     value: r.value,
-                    frequency: r.frequency,
+                    duration: r.duration,
                 }),
             })
             .collect()
@@ -207,7 +207,7 @@ mod tests {
                 duration: 2,
                 rate: Some(RateData {
                     value: 1,
-                    frequency: 1,
+                    duration: 1,
                 }),
             },
         ];
@@ -221,7 +221,7 @@ mod tests {
                     (None, None) => {} // Pass
                     (Some(r), Some(rd)) => {
                         assert_eq!(r.value, rd.value);
-                        assert_eq!(r.frequency, rd.frequency);
+                        assert_eq!(r.duration, rd.duration);
                     }
                     _ => panic!("Mismatched Rate options value"),
                 }

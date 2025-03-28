@@ -28,17 +28,17 @@ impl ScheduleMessageData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FermentationStep {
     pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<Rate>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Rate {
     pub value: u8,
-    pub frequency: u8,
+    pub duration: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]

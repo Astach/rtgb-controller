@@ -32,7 +32,7 @@ _DATA_
 - Target: The cooling or heating hardware identifier
 - Date: When to fire the command
 - Status
-  - Planned: The command sent at `Date`
+  - Planned: The command will be sent
   - Sent: The command has been sent at `Date`
   - Acknowledged: The command has been received by the hardware
 
@@ -190,17 +190,7 @@ The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this
 
 ### Command firing rules
 
-- When a message is converted to commands, the firing date set in the CommandStatus `Planned` is:
-- `now` if the command is `StartFermentation`
-- the date of the previous command + the duration of the step referenced by the previous command. (including rates if any)
-
-- Once a `StartFermentation`` command has been `Acknowledged`, on the next event received from the hydrometer, check if the target_temperature is reached, if yes we can consider that the step has started for its given duration, so:
-Update the firing date of every following `Planned` command by :
-- calculating the delta between the `Planned` date of the `StartFermentation` command and the date when the target_temperature has been reached
-- adding the delta to all the `Planned` command.
-
-e.g. if my chamber temp is 12 and StartFermentation step target_temperature is 20, it may take a few hours to reach this value, let's say 5h.
-it means that I have to add 5 hours to all the Planned date of the following commands.
+- Once a `StartFermentation` command has been `Acknowledged`, on the next event received from the hydrometer, check if the `target_temperature` is reached, if yes we can consider that the step has started for its given duration, so:
 
 ## FAQ
 
@@ -216,29 +206,46 @@ psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-f
 
 ```nushell
 nats publish fermentation.schedule.command ('{
-∙     "id": "550e8400-e29b-41d4-a716-446655440000",
-∙     "sent_at": "2024-12-15T12:34:56Z",
-∙     "version": 1,
-∙     "type": "Schedule",
-∙     "data": {
-∙         "session_id": "486190da-9691-4e52-b085-7e270829766b",
-∙         "steps": [
-∙             {
-∙                 "target_temperature": 68,
-∙                 "duration": 24,
-∙                 "rate": {
-∙                     "value": 10,
-∙                     "frequency": 5
-∙                 }
-∙             },
-∙             {
-∙                 "target_temperature": 65,
-∙                 "duration": 48,
-∙                 "rate": null
-∙             }
-∙         ]
-∙     }
-∙ }')
+     "id": "550e8400-e29b-41d4-a716-446655440000",
+     "sent_at": "2024-12-15T12:34:56Z",
+     "version": 1,
+     "type": "Schedule",
+     "data": {
+         "session_id": "486190da-9691-4e52-b085-7e270829766b",
+         "hardwares": [
+            {
+              "id": "hw#1",
+              "hardware_type": "Cooling"
+             },
+            {
+              "id": "hw#2",
+              "hardware_type": "Heating"
+             }
+         ],
+         "steps": [
+             {
+                 "target_temperature": 20,
+                 "duration": 96,
+             },
+             {
+                 "target_temperature": 24,
+                 "rate": {
+                     "value": 2,
+                     "duration": 1
+                 },
+                 "duration": 72,
+             },
+             {
+                 "target_temperature": 2,
+                 "rate": {
+                     "value": 4,
+                     "duration": 6
+                 },
+                 "duration": 48,
+             }
+         ]
+     }
+ }')
 ```
 
 - Run unit tests:
