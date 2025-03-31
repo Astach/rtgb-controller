@@ -1,3 +1,4 @@
+
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use serde_json;
@@ -23,10 +24,12 @@ pub struct Event {
 pub struct EventData {
     session_id: Uuid,
     hardwares: Vec<HardwareData>,
-    steps: Vec<FermentationStepData>,
+    steps: Vec<FermentationStepData>, // use hashmap to have the fix order of steps instead
+                                      // of relying on array index.
 }
 #[derive(Deserialize, Debug)]
 pub struct FermentationStepData {
+    pub position: usize,
     pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<RateData>,
@@ -54,6 +57,36 @@ impl TryFrom<&async_nats::jetstream::Message> for Event {
             .map_err(|e| anyhow::anyhow!("JSON deserialization error: {}, {}", e, utf8_str))
     }
 }
+impl From<&FermentationStepData> for FermentationStep {
+    fn from(value: &FermentationStepData) -> Self {
+        FermentationStep {
+            position: value.position,
+            target_temperature: value.target_temperature,
+            duration: value.duration,
+            rate: value.rate.as_ref().map(|r| Rate {
+                value: r.value,
+                duration: r.duration,
+            }),
+        }
+    }
+}
+impl TryFrom<&HardwareData> for Hardware {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &HardwareData) -> anyhow::Result<Self, Self::Error> {
+        match value.hardware_type.to_lowercase().as_str() {
+            "heating" => Ok(Hardware {
+                id: value.id.to_string(),
+                hardware_type: HardwareType::Heating,
+            }),
+            "cooling" => Ok(Hardware {
+                id: value.id.to_string(),
+                hardware_type: HardwareType::Cooling,
+            }),
+            _ => Err(anyhow!("Unknown hardware type: {}", value.hardware_type)),
+        }
+    }
+}
 
 impl Event {
     pub fn to_domain(&self) -> Result<domain::message::Message> {
@@ -77,37 +110,16 @@ impl Event {
         })?
     }
     fn hardwares(data: &EventData) -> Result<Vec<Hardware>> {
-        data.hardwares
-            .iter()
-            .map(|h| match h.hardware_type.to_lowercase().as_str() {
-                "heating" => Ok(Hardware {
-                    id: h.id.to_string(),
-                    hardware_type: HardwareType::Heating,
-                }),
-                "cooling" => Ok(Hardware {
-                    id: h.id.to_string(),
-                    hardware_type: HardwareType::Cooling,
-                }),
-                _ => Err(anyhow!("Unknown hardware type: {}", h.hardware_type)),
-            })
-            .collect()
+        data.hardwares.iter().map(Hardware::try_from).collect()
     }
     fn steps(steps: &[FermentationStepData]) -> Vec<FermentationStep> {
-        steps
-            .iter()
-            .map(|step| FermentationStep {
-                target_temperature: step.target_temperature,
-                duration: step.duration,
-                rate: step.rate.as_ref().map(|r| Rate {
-                    value: r.value,
-                    duration: r.duration,
-                }),
-            })
-            .collect()
+        steps.into_iter().map(FermentationStep::from).collect()
     }
 }
 #[cfg(test)]
 mod tests {
+    
+
     use time::OffsetDateTime;
     use uuid::Uuid;
 
@@ -124,6 +136,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
+                position: 0,
                 target_temperature: 21.0,
                 duration: 1,
                 rate: None,
@@ -151,6 +164,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
+                position: 0,
                 target_temperature: 21.0,
                 duration: 1,
                 rate: None,
@@ -170,6 +184,7 @@ mod tests {
                 hardware_type: "cooling".to_string(),
             }],
             steps: vec![FermentationStepData {
+                position: 0,
                 target_temperature: 21.0,
                 duration: 1,
                 rate: None,
@@ -187,6 +202,7 @@ mod tests {
                 hardware_type: "chilling".to_string(),
             }],
             steps: vec![FermentationStepData {
+                position: 0,
                 target_temperature: 21.0,
                 duration: 1,
                 rate: None,
@@ -198,11 +214,13 @@ mod tests {
     fn should_map_event_step_to_fermentation_step() {
         let step_data = vec![
             FermentationStepData {
+                position: 0,
                 target_temperature: 21.0,
                 duration: 1,
                 rate: None,
             },
             FermentationStepData {
+                position: 0,
                 target_temperature: 22.0,
                 duration: 2,
                 rate: Some(RateData {
@@ -211,20 +229,20 @@ mod tests {
                 }),
             },
         ];
-        Event::steps(&step_data)
-            .iter()
-            .enumerate()
-            .for_each(|(i, step)| {
-                assert_eq!(step.duration, step_data[i].duration);
-                assert_eq!(step.target_temperature, step_data[i].target_temperature);
-                match (&step.rate, &step_data[i].rate) {
-                    (None, None) => {} // Pass
-                    (Some(r), Some(rd)) => {
-                        assert_eq!(r.value, rd.value);
-                        assert_eq!(r.duration, rd.duration);
-                    }
-                    _ => panic!("Mismatched Rate options value"),
+        Event::steps(&step_data).iter().for_each(|step| {
+            assert_eq!(step.duration, step_data[step.position].duration);
+            assert_eq!(
+                step.target_temperature,
+                step_data[step.position].target_temperature
+            );
+            match (&step.rate, &step_data[step.position].rate) {
+                (None, None) => {} // Pass
+                (Some(r), Some(rd)) => {
+                    assert_eq!(r.value, rd.value);
+                    assert_eq!(r.duration, rd.duration);
                 }
-            });
+                _ => panic!("Mismatched Rate options value"),
+            }
+        });
     }
 }

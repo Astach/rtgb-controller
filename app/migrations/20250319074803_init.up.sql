@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS "command" (
     command_type VARCHAR(250) CHECK (command_type IN ('StartFermentation', 'StopFermentation', 'IncreaseTemperature', 'DecreaseTemperature')) NOT NULL,
     holding_duration INTEGER NOT NULL,
     fermentation_step_id INTEGER NOT NULL,
-    status VARCHAR(250) CHECK (status IN ('Planned', 'Sent', 'Acknowledged')), 
+    status VARCHAR(250) CHECK (status IN ('Planned', 'Sent', 'Acknowledged', 'Executed')), 
     status_date TIMESTAMP,
     value NUMERIC(3,1) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT now(),

@@ -1,9 +1,8 @@
-use anyhow::Result;
 use uuid::Uuid;
 
 use crate::core::domain::{
     command::Command,
-    message::{self, Hardware, Message},
+    message::{Hardware, Message},
 };
 
 pub trait MessageDriverPort {

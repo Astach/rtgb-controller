@@ -72,14 +72,14 @@ impl CommandType {
     }
 }
 
-/// Status evolves like so Planned -> Sent -> Acknowledged
+/// Status evolves like so Planned -> Sent -> Acknowledged -> Executed
 pub enum CommandStatus {
     Planned, // we don't know when is the planned date when we create the
     // command as it depends on the finish date of the previous command if any
     Sent(OffsetDateTime),
     Acknowledged(OffsetDateTime), // when was it acknowledged ( used to know when to trigger the
     // next one
-    Executed, // when the target_temp is reached and optional duration passed
+    Executed(OffsetDateTime), // when the target_temp is reached and optional duration passed
 }
 
 impl Default for CommandStatus {
@@ -94,6 +94,7 @@ impl CommandStatus {
             CommandStatus::Planned => "Planned",
             CommandStatus::Sent(..) => "Sent",
             CommandStatus::Acknowledged(..) => "Acknowledged",
+            CommandStatus::Executed(..) => "Executed",
         }
     }
     pub fn date(&self) -> Option<OffsetDateTime> {
@@ -101,6 +102,7 @@ impl CommandStatus {
             CommandStatus::Planned => None,
             CommandStatus::Sent(offset_date_time) => Some(*offset_date_time),
             CommandStatus::Acknowledged(offset_date_time) => Some(*offset_date_time),
+            CommandStatus::Executed(offset_date_time) => Some(*offset_date_time),
         }
     }
 }

@@ -115,14 +115,14 @@ impl<R: MessageDrivenPort> MessageService<R> {
         })
     }
 
-    fn build_command(&self, session_id: Uuid, idx: u8, command_type: CommandType) -> Command {
+    fn build_command(&self, session_id: Uuid, idx: usize, command_type: CommandType) -> Command {
         Command {
             id: Uuid::new_v4(),
             sent_at: None,
             version: 1,
             session_data: SessionData {
                 id: session_id,
-                fermentation_step_idx: idx,
+                fermentation_step_idx: idx as u8,
             },
             status: CommandStatus::Planned,
             command_type,
@@ -143,38 +143,39 @@ impl<R: MessageDrivenPort> MessageService<R> {
     fn build_commands(&self, data: &ScheduleMessageData) -> anyhow::Result<Vec<Command>> {
         data.steps
             .iter()
-            .enumerate()
-            .flat_map(|(idx, step)| {
+            .flat_map(|step| {
                 step.rate.as_ref().map_or(
                     {
                         vec![
                             self.build_command_type(
-                                idx,
+                                step.position,
                                 &data.steps,
                                 step.target_temperature,
                                 None,
                             )
-                            .map(|c_type| self.build_command(data.session_id, idx as u8, c_type)),
+                            .map(|c_type| {
+                                self.build_command(data.session_id, step.position, c_type)
+                            }),
                         ]
                     },
                     |rate| {
                         // FIXME can't have a rate on the first step (StartFermentation) as we don't know the current
                         // temperature
                         let number_of_commands = self.calculate_rate_commands_number(
-                            data.steps[idx - 1].target_temperature,
+                            data.steps[step.position - 1].target_temperature,
                             step.target_temperature,
                             f32::from(rate.value),
                         );
                         (0..number_of_commands)
                             .map(|_| {
                                 self.build_command_type(
-                                    idx,
+                                    step.position,
                                     &data.steps,
                                     f32::from(rate.value),
                                     Some(rate.duration),
                                 )
                                 .map(|c_type| {
-                                    self.build_command(data.session_id, idx as u8, c_type)
+                                    self.build_command(data.session_id, step.position, c_type)
                                 })
                             })
                             .collect()

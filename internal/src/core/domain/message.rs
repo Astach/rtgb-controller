@@ -1,3 +1,4 @@
+
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -30,6 +31,7 @@ impl ScheduleMessageData {
 
 #[derive(Debug, PartialEq)]
 pub struct FermentationStep {
+    pub position: usize,
     pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<Rate>,

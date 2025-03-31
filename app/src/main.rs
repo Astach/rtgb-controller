@@ -12,7 +12,7 @@ use inbound::nats::Nats;
 use internal::core::{
     port::messaging::MessageDriverPort, service::message_service::MessageService,
 };
-use log::{debug, error, info};
+use log::{debug, error};
 use outbound::postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
 use utils::pem::PemUtils;

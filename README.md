@@ -7,10 +7,11 @@ RTGB Controller is responsible for scheduling command to controller an active fe
 1. Receives an event from the RTGB API that includes the fermentation steps to send to a chamber
 2. Convert the event to the corresponding scheduling commands
 3. Store in a DB all the scheduling commands.
-4. Every minute checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
+4. Every 20 minutes checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
 5. Update the command as Sent
 6. Update the command as Acknowledged when the socket responds to the command (via MQTT)
-7. Delete the scheduled commands once the StopFermentation command is Acknowledged/ (or sent?)
+7. On every check, verify that if the target_temperature is reached, it has been held for the specified duration.
+8. Once the step is done, update the command to Executed.
 
 ### Command description
 
@@ -20,21 +21,23 @@ _METADATA_
 - SentAt <Epoch of the command sending>
 - Version <Command Version>
 - Type <Command Type>
+
   - StartFermentation: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
   - IncreaseTemperature: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
   - DecreaseTemperature: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
   - StopFermentation: Stop the fermentation at the given `Value`. e.g. Stop 20
+    _DATA_
 
-_DATA_
-
-- Value: A temperature value, can represent a temperature in Celcius or an absolute delta
 - Session : The session identifier associated with this command
+- Value: A temperature value, can represent a temperature in Celcius or an absolute delta
 - Target: The cooling or heating hardware identifier
+- Duration: Duration for which the target temperature must be held.
 - Date: When to fire the command
 - Status
   - Planned: The command will be sent
   - Sent: The command has been sent at `Date`
   - Acknowledged: The command has been received by the hardware
+  - Executed: The command has been executed, we can move on to the next one.
 
 #### Examples
 
@@ -190,6 +193,7 @@ The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this
 
 ### Command firing rules
 
+- The `StartFermentation` is not instantly triggered as we don't know what is the current temperature of the fermentation chamber. Once the first value of the hydrometer is received, the `StartFermentation` command will be sent and increase or decrease the temperature to reach the targeted one.
 - Once a `StartFermentation` command has been `Acknowledged`, on the next event received from the hydrometer, check if the `target_temperature` is reached, if yes we can consider that the step has started for its given duration, so:
 
 ## FAQ
@@ -224,10 +228,12 @@ nats publish fermentation.schedule.command ('{
          ],
          "steps": [
              {
+                 "position": 0,
                  "target_temperature": 20,
                  "duration": 96,
              },
              {
+                 "position": 1,
                  "target_temperature": 24,
                  "rate": {
                      "value": 2,
@@ -236,6 +242,7 @@ nats publish fermentation.schedule.command ('{
                  "duration": 72,
              },
              {
+                 "position": 3,
                  "target_temperature": 2,
                  "rate": {
                      "value": 4,
