@@ -1,3 +1,5 @@
+use std::any;
+
 use crate::core::domain::command::{Command, CommandStatus, CommandType, SessionData};
 use crate::core::domain::message::{
     FermentationStep, HardwareType, Message, MessageType, ScheduleMessageData,
@@ -35,55 +37,60 @@ impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
 /// DecreaseTemperature the temperature if the step target_temp if lower than the one before
 /// StopFermentation if we've reached the last fermentation step
 impl<R: MessageDrivenPort> MessageService<R> {
-    fn validate(&self, steps: &[FermentationStep]) -> anyhow::Result<()> {
+    fn validate(&self, steps: &[FermentationStep]) -> anyhow::Result<bool> {
         if steps.len() < 2 {
             return Err(anyhow::anyhow!(
                 "There must be at least a StartFermentation and StopFermentation step"
             ));
         }
-        if steps.first().is_some_and(|step| step.rate.is_some()) {
+
+        if steps
+            .iter()
+            .find(|s| s.position == 0)
+            .is_some_and(|step| step.rate.is_some())
+        {
             return Err(anyhow::anyhow!(
                 "rate can't be defined for StartFermentation"
             ));
         }
+
         //TODO must be tested
-        if steps.iter().filter(|x| x.rate.is_some()).all(|step| {
-            let step_idx = match steps.iter().position(|x| x == step) {
-                Some(idx) => idx,
-                None => {
-                    error!(
-                        "Unable to find step with a rate in the array of steps: {:?}",
-                        step
-                    );
-                    return false;
-                }
-            };
-            let rate_temp_value = step.rate.as_ref().map_or(0, |rate| i32::from(rate.value));
-            let number_of_cmds = self.calculate_rate_commands_number(
-                steps[step_idx - 1].target_temperature,
-                step.target_temperature,
-                rate_temp_value as f32,
-            );
-            let final_temp_delta = rate_temp_value * number_of_cmds;
-            let temp_delta_between_steps =
-                (steps[step_idx - 1].target_temperature - step.target_temperature).abs() as i32;
-            let rate_is_valid = final_temp_delta == temp_delta_between_steps;
+        steps
+            .iter()
+            .filter(|x| x.rate.is_some())
+            .try_fold(true, |_, step| {
+                let previous_step = steps.iter().find(|s| s.position == step.position - 1);
+                let previous_step = match previous_step {
+                    Some(prev_step) => prev_step,
+                    None => return Err(anyhow::anyhow!( "Unable to find step with position {:?}", step.position - 1)) 
+                };
+            let rate_is_valid = self.validate_rate(previous_step, step)?;
             if !rate_is_valid {
-                warn!(
-                    "Rate configuration {:?} for step with index {:?} with target temp {:?} is not valid considering the previous step's target temperature of {:?}",
-                    &step.rate,
-                    step_idx,
-                    step.target_temperature,
-                    steps[step_idx - 1].target_temperature
-                );
+                warn!( "Rate configuration for step  {:?} is not valid considering the previous step's target temperature of {:?}", step, previous_step.target_temperature);
+                return Err(anyhow::anyhow!( "Rate for step {:?} is misconfigured, the final temperature after its execution would overpass the whished targeted temperature", step));
             }
-            rate_is_valid
-        }) {
-            return Err(anyhow::anyhow!(
-                "some rate(s) are misconfigured, there executions would overpass the whished targeted temperature"
-            ));
-        }
-        Ok(())
+            Ok(rate_is_valid)
+            })
+    }
+    fn validate_rate(
+        &self,
+        previous_step: &FermentationStep,
+        step: &FermentationStep,
+    ) -> anyhow::Result<bool> {
+        let rate_temp_value = step
+            .rate
+            .as_ref()
+            .map(|rate| i32::from(rate.value))
+            .ok_or(anyhow::anyhow!("Unable to find rate for step {:?}", step))?;
+        let number_of_cmds = self.calculate_rate_commands_number(
+            previous_step.target_temperature,
+            step.target_temperature,
+            rate_temp_value as f32,
+        );
+        let final_temp_delta = rate_temp_value * number_of_cmds;
+        let temp_delta_between_steps =
+            (previous_step.target_temperature - step.target_temperature).abs() as i32;
+        Ok(final_temp_delta == temp_delta_between_steps)
     }
     fn build_command_type(
         &self,
