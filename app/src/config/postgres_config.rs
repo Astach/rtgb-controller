@@ -19,6 +19,7 @@ impl PostgresConfig {
         PgConnectOptions::new()
             .database(&self.database)
             .host(&self.host)
+            .port(self.port)
             .username(&self.username)
             .ssl_mode(PgSslMode::VerifyFull)
             .ssl_root_cert(self.cert.get_path_of(CertFileType::Ca))

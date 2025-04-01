@@ -38,9 +38,9 @@ impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
 /// StopFermentation if we've reached the last fermentation step
 impl<R: MessageDrivenPort> MessageService<R> {
     fn validate(&self, steps: &[FermentationStep]) -> anyhow::Result<bool> {
-        if steps.len() < 2 {
+        if steps.is_empty() {
             return Err(anyhow::anyhow!(
-                "There must be at least a StartFermentation and StopFermentation step"
+                "There must be at least a one fermentation step"
             ));
         }
 
@@ -50,7 +50,7 @@ impl<R: MessageDrivenPort> MessageService<R> {
             .is_some_and(|step| step.rate.is_some())
         {
             return Err(anyhow::anyhow!(
-                "rate can't be defined for StartFermentation"
+                "rate can't be defined for the first fermentation step"
             ));
         }
 
@@ -66,8 +66,8 @@ impl<R: MessageDrivenPort> MessageService<R> {
                 };
             let rate_is_valid = self.validate_rate(previous_step, step)?;
             if !rate_is_valid {
-                warn!( "Rate configuration for step  {:?} is not valid considering the previous step's target temperature of {:?}", step, previous_step.target_temperature);
-                return Err(anyhow::anyhow!( "Rate for step {:?} is misconfigured, the final temperature after its execution would overpass the whished targeted temperature", step));
+                warn!( "Rate configuration for {:?} is not valid considering the previous step's target temperature of {:?}", step, previous_step.target_temperature);
+                return Err(anyhow::anyhow!( "Rate for {:?} is misconfigured, the final temperature after its execution is would be below the whished targeted temperature", step));
             }
             Ok(rate_is_valid)
             })
@@ -90,31 +90,30 @@ impl<R: MessageDrivenPort> MessageService<R> {
         let final_temp_delta = rate_temp_value * number_of_cmds;
         let temp_delta_between_steps =
             (previous_step.target_temperature - step.target_temperature).abs() as i32;
-        Ok(final_temp_delta == temp_delta_between_steps)
+        Ok(final_temp_delta >= temp_delta_between_steps)
     }
     fn build_command_type(
         &self,
-        idx: usize,
-        steps: &[FermentationStep],
-        target_temp: f32,
+        previous_step: Option<&FermentationStep>,
+        step: &FermentationStep,
+        value: f32,
         holding_duration: Option<u8>,
     ) -> anyhow::Result<CommandType> {
-        Ok(match idx {
-            0 => CommandType::StartFermentation { target_temp },
-            x if x == steps.len() - 1 => CommandType::StopFermentation {
-                target_temp,
-                holding_duration,
-            },
+        Ok(match step.position {
+            0 => CommandType::StartFermentation { value },
             _ => {
-                let is_target_temp_higher = target_temp > steps[idx - 1].target_temperature;
+                let is_target_temp_higher = step.target_temperature
+                    > previous_step
+                        .ok_or(anyhow::anyhow!("Step before {:?} must exist", step))?
+                        .target_temperature;
                 if is_target_temp_higher {
                     CommandType::IncreaseTemperature {
-                        target_temp,
+                        value,
                         holding_duration,
                     }
                 } else {
                     CommandType::DecreaseTemperature {
-                        target_temp,
+                        value,
                         holding_duration,
                     }
                 }
@@ -122,14 +121,19 @@ impl<R: MessageDrivenPort> MessageService<R> {
         })
     }
 
-    fn build_command(&self, session_id: Uuid, idx: usize, command_type: CommandType) -> Command {
+    fn build_command(
+        &self,
+        session_id: Uuid,
+        step_position: usize,
+        command_type: CommandType,
+    ) -> Command {
         Command {
             id: Uuid::new_v4(),
             sent_at: None,
             version: 1,
             session_data: SessionData {
                 id: session_id,
-                fermentation_step_idx: idx as u8,
+                step_position: step_position as u8,
             },
             status: CommandStatus::Planned,
             command_type,
@@ -143,20 +147,21 @@ impl<R: MessageDrivenPort> MessageService<R> {
         rate: f32,
     ) -> i32 {
         let delta = (previous_target_temp - next_target_temp).abs();
-        (delta / rate) as i32
+        (delta / rate).ceil() as i32
     }
 
     // TODO test it
     fn build_commands(&self, data: &ScheduleMessageData) -> anyhow::Result<Vec<Command>> {
-        data.steps
+        let mut commands: anyhow::Result<Vec<Command>> = data
+            .steps
             .iter()
             .flat_map(|step| {
                 step.rate.as_ref().map_or(
                     {
                         vec![
                             self.build_command_type(
-                                step.position,
-                                &data.steps,
+                                data.steps.iter().find(|s| s.position == step.position - 1),
+                                step,
                                 step.target_temperature,
                                 None,
                             )
@@ -166,8 +171,6 @@ impl<R: MessageDrivenPort> MessageService<R> {
                         ]
                     },
                     |rate| {
-                        // FIXME can't have a rate on the first step (StartFermentation) as we don't know the current
-                        // temperature
                         let number_of_commands = self.calculate_rate_commands_number(
                             data.steps[step.position - 1].target_temperature,
                             step.target_temperature,
@@ -176,8 +179,8 @@ impl<R: MessageDrivenPort> MessageService<R> {
                         (0..number_of_commands)
                             .map(|_| {
                                 self.build_command_type(
-                                    step.position,
-                                    &data.steps,
+                                    data.steps.iter().find(|s| s.position == step.position - 1),
+                                    step,
                                     f32::from(rate.value),
                                     Some(rate.duration),
                                 )
@@ -189,7 +192,17 @@ impl<R: MessageDrivenPort> MessageService<R> {
                     },
                 )
             })
-            .collect()
+            .collect();
+        let last_pos = data
+            .steps
+            .iter()
+            .max_by_key(|s| s.position)
+            .map(|s| s.position)
+            .ok_or(anyhow!("Can't find last position"))?;
+        if let Ok(cmds) = commands.as_mut() {
+            cmds.push(self.build_command(data.session_id, last_pos, CommandType::StopFermentation));
+        }
+        commands
     }
 }
 

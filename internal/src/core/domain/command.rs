@@ -13,29 +13,26 @@ pub struct Command {
 
 #[derive(Clone)]
 pub enum CommandType {
-    // start the fermentation process, move on when target_temp is reached
+    // start the fermentation process, move on when the temperature is value
     StartFermentation {
-        target_temp: f32,
+        value: f32,
     },
-    // increase temperature by target_temp
+    // increase temperature by value
     IncreaseTemperature {
-        target_temp: f32,
+        value: f32,
         holding_duration: Option<u8>, // for how long should we hold the targeted temperature once reached
     },
-    // decrease temperature by target_temp
+    // decrease temperature by value
     DecreaseTemperature {
-        target_temp: f32,
+        value: f32,
         holding_duration: Option<u8>, // for how long should we hold the targeted temperature once reached
     },
-    // stop the fermentation process once the target_temp is reached
-    StopFermentation {
-        target_temp: f32,
-        holding_duration: Option<u8>, // for how long should we hold the targeted temperature once reached
-    },
+    // stop the fermentation process (send a command to both heating and cooling socket to turn off)
+    StopFermentation,
 }
 impl Default for CommandType {
     fn default() -> Self {
-        CommandType::StartFermentation { target_temp: 20.0 }
+        CommandType::StartFermentation { value: 20.0 }
     }
 }
 
@@ -57,17 +54,15 @@ impl CommandType {
             CommandType::DecreaseTemperature {
                 holding_duration, ..
             } => *holding_duration,
-            CommandType::StopFermentation {
-                holding_duration, ..
-            } => *holding_duration,
+            CommandType::StopFermentation => None,
         }
     }
-    pub fn target_temp(&self) -> f32 {
+    pub fn value(&self) -> Option<f32> {
         match self {
-            CommandType::StartFermentation { target_temp } => *target_temp,
-            CommandType::IncreaseTemperature { target_temp, .. } => *target_temp,
-            CommandType::DecreaseTemperature { target_temp, .. } => *target_temp,
-            CommandType::StopFermentation { target_temp, .. } => *target_temp,
+            CommandType::StartFermentation { value } => Some(*value),
+            CommandType::IncreaseTemperature { value, .. } => Some(*value),
+            CommandType::DecreaseTemperature { value, .. } => Some(*value),
+            CommandType::StopFermentation => None,
         }
     }
 }
@@ -109,5 +104,5 @@ impl CommandStatus {
 #[derive(Default)]
 pub struct SessionData {
     pub id: Uuid,
-    pub fermentation_step_idx: u8,
+    pub step_position: u8,
 }

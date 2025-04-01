@@ -11,7 +11,7 @@ name = "consumer-name"
 absolute_folder_path = "/home/certs"
 key_file_name = "client.key"
 cert_file_name = "client.crt"
-root_ca_file_name = "ca.cert"
+root_ca_file_name = "ca.crt"
 
 [postgres]
 database = "db_name"
@@ -24,4 +24,4 @@ tables = ["table_name"]
 absolute_folder_path = "/home/certs"
 key_file_name = "client.key"
 cert_file_name = "client.crt"
-root_ca_file_name = "ca.cert"
+root_ca_file_name = "ca.crt"
