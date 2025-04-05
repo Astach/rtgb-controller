@@ -1,145 +1,156 @@
-
-use std::str::FromStr;
+use std::{fmt::format, str::FromStr};
 
 use log::debug;
-use sqlx::{query, query_scalar, types::BigDecimal, PgPool};
+use sqlx::{PgPool, query, query_scalar, types::BigDecimal};
 use time::PrimitiveDateTime;
 use uuid::Uuid;
 
 use internal::core::{
-    domain::{
-        command::Command,
-        message::Hardware,
-    },
+    domain::{command::NewCommand, message::Hardware},
     port::messaging::MessageDrivenPort,
 };
 
 pub struct MessageRepository<'a> {
     pub pool: &'a PgPool,
+    command_table: &'a str,
+    session_table: &'a str,
 }
 
 impl<'a> MessageRepository<'a> {
     pub fn new(pool: &'a PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            command_table: "command",
+            session_table: "session",
+        }
     }
 }
 
 impl MessageDrivenPort for MessageRepository<'_> {
-    async fn fetch(&self, command_id: Uuid) -> Option<Command> {
+    async fn fetch(&self, command_id: Uuid) -> Option<NewCommand> {
         todo!()
     }
 
-    fn update(&self, command_id: Uuid) -> anyhow::Result<Command> {
+    fn update(&self, command_id: Uuid) -> anyhow::Result<NewCommand> {
         todo!()
     }
-
-    fn delete(&self, command_id: Uuid) -> anyhow::Result<Command> {
+    fn delete(&self, command_id: Uuid) -> anyhow::Result<NewCommand> {
         todo!()
     }
 
     async fn insert(
         &self,
-        commands: Vec<Command>,
+        commands: Vec<NewCommand>,
         heating_h: Hardware,
         cooling_h: Hardware,
     ) -> anyhow::Result<u64> {
         let c = commands
             .first()
             .ok_or(anyhow::anyhow!("No command to insert"))?;
-        let  session_record_id = query_scalar!(
-            "INSERT INTO session (uuid, cooling_id, heating_id) VALUES ($1,$2,$3) RETURNING id",
-            c.session_data.id,
-            heating_h.id,
-            cooling_h.id
-        )
-        .fetch_one(self.pool)
-        .await?;
+        let sql_query = format!(
+            "INSERT INTO {:?} (uuid, cooling_id, heating_id) VALUES ($1,$2,$3) RETURNING id",
+            self.session_table
+        );
+        let session_record_id = query_scalar(sql_query.as_str())
+            .bind(c.session_data.id)
+            .bind(heating_h.id)
+            .bind(cooling_h.id)
+            .fetch_one(self.pool)
+            .await?;
         debug!("Inserted session with id {session_record_id}");
-        let records = commands.iter().map(|c| NewCommandRecord::from_command(c, session_record_id)).collect::<anyhow::Result<Vec<NewCommandRecord>>>()?; 
-        let futures  : Vec<_>= records.iter().map(|rec| {
-            query!(
-                "INSERT INTO command (uuid, session_id, fermentation_step_id, command_type, holding_duration, value, status, status_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8);", 
-                rec.command_id, 
-                rec.session_id,
-                rec.fermentation_step_id,
-                rec.command_type,
-                rec.holding_duration,
-                rec.value,
-                rec.status,
-                rec.status_date
-            ).execute(self.pool)
-        }).collect();
+        let records = commands
+            .iter()
+            .map(|c| NewCommandRecord::from_command(c, session_record_id))
+            .collect::<anyhow::Result<Vec<NewCommandRecord>>>()?;
+        let sql_query = format!(
+            "INSERT INTO {:?} (uuid, fermentation_step_id, status, status_date,value, value_reached_at,value_holding_duration, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            self.command_table
+        );
+        let futures: Vec<_> = records
+            .iter()
+            .map(|rec| {
+                query(sql_query.as_str())
+                    .bind(rec.command_id)
+                    .bind(rec.fermentation_step_id)
+                    .bind(rec.status.clone())
+                    .bind(rec.status_date)
+                    .bind(rec.value.clone())
+                    .bind(None as Option<PrimitiveDateTime>)
+                    .bind(rec.value_holding_duration)
+                    .bind(rec.session_id)
+                    .execute(self.pool)
+            })
+            .collect();
 
         futures::future::join_all(futures)
             .await
             .into_iter()
             .try_fold(0, |acc, result| {
                 result
-                    .map_err(|e| {
-                        anyhow::anyhow!("Can't execute command insert {}", e)
-                    })
-                    .map(|query_result| {
-                        acc + query_result.rows_affected()
-                    })
+                    .map_err(|e| anyhow::anyhow!("Can't execute command insert {}", e))
+                    .map(|query_result| acc + query_result.rows_affected())
             })
-
     }
 }
 
-struct NewCommandRecord{
+struct NewCommandRecord {
     pub command_id: Uuid,
-    pub session_id : i32,
-    pub fermentation_step_id : i32,
-    pub command_type: String,
-    pub holding_duration: i32,
-    pub value: BigDecimal,
+    pub fermentation_step_id: i32,
     pub status: String,
     pub status_date: Option<PrimitiveDateTime>,
+    pub value: BigDecimal,
+    pub value_holding_duration: i32,
+    pub session_id: i32,
 }
 
 impl NewCommandRecord {
-   fn from_command(command : &Command, session_id : i32) -> anyhow::Result<Self>{
-        debug!("{:?}", &format!("{:.1}", command.command_type.target_temp()));
-        Ok(Self{
+    fn from_command(command: &NewCommand, session_id: i32) -> anyhow::Result<Self> {
+        Ok(Self {
             command_id: command.id,
-            session_id,
-            fermentation_step_id: command.session_data.fermentation_step_idx as i32,
-            command_type: command.command_type.name().to_string(),
-            holding_duration: command.command_type.holding_duration().map_or( 0 , |v| v as i32),
-            value: BigDecimal::from_str(&format!("{:.1}", command.command_type.target_temp()))?.with_scale(1),
+            fermentation_step_id: command.session_data.step_position as i32,
             status: command.status.name().into(),
-            status_date: command.status.date().map(|d| PrimitiveDateTime::new(d.date(), d.time()))
+            status_date: command
+                .status
+                .date()
+                .map(|d| PrimitiveDateTime::new(d.date(), d.time())),
+            value: BigDecimal::from_str(&format!("{:.1}", command.value))?.with_scale(1),
+            value_holding_duration: command.value_holding_duration as i32,
+            session_id,
         })
-    } 
+    }
 }
-
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use internal::core::{domain::{command::Command, message::{Hardware, HardwareType}}, port::messaging::MessageDrivenPort};
-    use sqlx::{types::BigDecimal, PgPool};
+    use internal::core::{
+        domain::{
+            command::NewCommand,
+            message::{Hardware, HardwareType},
+        },
+        port::messaging::MessageDrivenPort,
+    };
+    use sqlx::{PgPool, types::BigDecimal};
     use uuid::Uuid;
 
-#[test]
-fn should_create_new_command_record(){
+    #[test]
+    fn should_create_new_command_record() {
         let session_id = 1;
-       let record = NewCommandRecord::from_command(&Command::default(), 1).unwrap();
-        assert_eq!(record.command_type, "StartFermentation");
-        assert_eq!(record.holding_duration, 0);
-        assert_eq!(record.value, BigDecimal::from_str("20.0").unwrap());
+        let record = NewCommandRecord::from_command(&NewCommand::default(), 1).unwrap();
+        assert_eq!(record.value_holding_duration, 0);
+        assert_eq!(record.value, BigDecimal::from_str("0.0").unwrap());
         assert_eq!(record.fermentation_step_id, 0);
         assert_eq!(record.command_id, Uuid::default());
         assert_eq!(record.session_id, session_id);
         assert_eq!(record.status, "Planned");
-        assert_eq!(record.status_date, None );
+        assert_eq!(record.status_date, None);
     }
     use super::{MessageRepository, NewCommandRecord};
     #[sqlx::test(migrations = "./migrations")]
-    async fn should_insert_commands(pool: PgPool) -> anyhow::Result<()>{
+    async fn should_insert_commands(pool: PgPool) -> anyhow::Result<()> {
         let repo = MessageRepository::new(&pool);
-        let cmds = vec![Command::default()];
+        let cmds = vec![NewCommand::default()];
         let heating_h = Hardware::new(String::from("heating_id"), HardwareType::Heating);
         let cooling_h = Hardware::new(String::from("cooling_id"), HardwareType::Cooling);
         let result = repo.insert(cmds, heating_h, cooling_h).await;

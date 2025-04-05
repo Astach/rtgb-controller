@@ -1,4 +1,3 @@
-
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use serde_json;
@@ -118,7 +117,6 @@ impl Event {
 }
 #[cfg(test)]
 mod tests {
-    
 
     use time::OffsetDateTime;
     use uuid::Uuid;
@@ -220,7 +218,7 @@ mod tests {
                 rate: None,
             },
             FermentationStepData {
-                position: 0,
+                position: 1,
                 target_temperature: 22.0,
                 duration: 2,
                 rate: Some(RateData {

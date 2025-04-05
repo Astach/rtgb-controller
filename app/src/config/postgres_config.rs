@@ -11,7 +11,6 @@ pub struct PostgresConfig {
     pub port: u16,
     pub username: String,
     pub cert: CertConfig,
-    pub tables: Vec<String>,
 }
 
 impl PostgresConfig {

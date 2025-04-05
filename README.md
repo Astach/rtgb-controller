@@ -25,7 +25,6 @@ _METADATA_
   - StartFermentation: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
   - IncreaseTemperature: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
   - DecreaseTemperature: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
-  - StopFermentation: Stop the fermentation at the given `Value`. e.g. Stop 20
     _DATA_
 
 - Session : The session identifier associated with this command
@@ -173,8 +172,8 @@ export NATS_TLS_VERIFY=true
 ### Scheduling Command
 
 - The first command must be a `StartFermentation` command
-- The last command must be a `StopFermentation` command
-- There can be only one `StartFermentation` and one `StopFermentation` command
+- There can be only one `StartFermentation`
+- After the last command is in Executed State, we stop the fermentation by sending a turn off to the heating and cooling device.
 
 The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this means the payload is sent using protobuf.
 
