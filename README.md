@@ -7,10 +7,11 @@ RTGB Controller is responsible for scheduling command to controller an active fe
 1. Receives an event from the RTGB API that includes the fermentation steps to send to a chamber
 2. Convert the event to the corresponding scheduling commands
 3. Store in a DB all the scheduling commands.
-4. Every minute checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
+4. Every 20 minutes checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
 5. Update the command as Sent
 6. Update the command as Acknowledged when the socket responds to the command (via MQTT)
-7. Delete the scheduled commands once the StopFermentation command is Acknowledged/ (or sent?)
+7. On every check, verify that if the target_temperature is reached, it has been held for the specified duration.
+8. Once the step is done, update the command to Executed.
 
 ### Command description
 
@@ -20,21 +21,21 @@ _METADATA_
 - SentAt <Epoch of the command sending>
 - Version <Command Version>
 - Type <Command Type>
+
   - StartFermentation: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
   - IncreaseTemperature: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
   - DecreaseTemperature: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
-  - StopFermentation: Stop the fermentation at the given `Value`. e.g. Stop 20
+    _DATA_
 
-_DATA_
-
-- Value: A temperature value, can represent a temperature in Celcius or an absolute delta
 - Session : The session identifier associated with this command
+- Value: A temperature value, can represent a temperature in Celcius or an absolute delta
 - Target: The cooling or heating hardware identifier
+- Duration: Duration for which the target temperature must be held.
 - Date: When to fire the command
 - Status
-  - Planned: The command sent at `Date`
-  - Sent: The command has been sent at `Date`
-  - Acknowledged: The command has been received by the hardware
+  - Planned: The command will be sent
+  - Running: The command is currently running
+  - Executed: The command has been executed, we can move on to the next one.
 
 #### Examples
 
@@ -129,9 +130,12 @@ tls {
 
 #### Usage
 
-1. Install nats cli and export the following variables
+1. Install `direnv` and create a `.envrc` file
+2. add the following variables
 
 ```bash
+export DATABASE_URL="postgres@..." # used by sqlx to check query at compile time
+export TEST_DATABASE_URL="postgres://$(whoami)@localhost/rtgb_scheduler"
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
@@ -139,19 +143,12 @@ export NATS_KEY=/path/to/certs/client.key
 export NATS_TLS_VERIFY=true
 ```
 
-or using nushell
+**Important**: use absolute paths in your database url for certificates' path, you can use `${PWD}` e.g.: `${PWD}/certs/root.ca`.
 
-```nushell
- export-env { $env.NATS_URL = 'nats://localhost:4222' }
- export-env { $env.NATS_CA = '/path/to/certs/ca.crt' }
- export-env { $env.NATS_CERT = '/path/to/certs/client.crt' }
- export-env { $env.NATS_KEY = '/path/to/certs/client.key' }
- export-env { $env.NATS_TLS_VERIFY = true }
-```
-
-2. Launch the nats server using `docker compose up`
-3. Send a message `nats publish <subject> <message>`
-4. Subscribe to subject `nats subscribe <subject>`
+3. Install `nats` cli and export the following variables
+4. Launch the nats server using `docker compose up`
+5. Send a message `nats publish <subject> <message>`
+6. Subscribe to subject `nats subscribe <subject>`
 
 ### Postgres
 
@@ -174,8 +171,8 @@ or using nushell
 ### Scheduling Command
 
 - The first command must be a `StartFermentation` command
-- The last command must be a `StopFermentation` command
-- There can be only one `StartFermentation` and one `StopFermentation` command
+- There can be only one `StartFermentation`
+- After the last command is in Executed State, we stop the fermentation by sending a turn off to the heating and cooling device.
 
 The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this means the payload is sent using protobuf.
 
@@ -192,6 +189,11 @@ The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this
   - Value
   - Target
 
+### Command firing rules
+
+- The `StartFermentation` is not instantly triggered as we don't know what is the current temperature of the fermentation chamber. Once the first value of the hydrometer is received, the `StartFermentation` command will be sent and increase or decrease the temperature to reach the targeted one.
+- Once a `StartFermentation` command has been `Acknowledged`, on the next event received from the hydrometer, check if the `target_temperature` is reached, if yes we can consider that the step has started for its given duration, so:
+
 ## FAQ
 
 - Access the pg container `docker exec -it <container_id>  /bin/bash`
@@ -206,27 +208,50 @@ psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-f
 
 ```nushell
 nats publish fermentation.schedule.command ('{
-∙     "id": "550e8400-e29b-41d4-a716-446655440000",
-∙     "sent_at": "2024-12-15T12:34:56Z",
-∙     "version": 1,
-∙     "type": "Schedule",
-∙     "data": {
-∙         "session_id": "486190da-9691-4e52-b085-7e270829766b",
-∙         "steps": [
-∙             {
-∙                 "target_temperature": 68,
-∙                 "duration": 24,
-∙                 "rate": {
-∙                     "value": 10,
-∙                     "frequency": 5
-∙                 }
-∙             },
-∙             {
-∙                 "target_temperature": 65,
-∙                 "duration": 48,
-∙                 "rate": null
-∙             }
-∙         ]
-∙     }
-∙ }')
+     "id": "550e8400-e29b-41d4-a716-446655440000",
+     "sent_at": "2024-12-15T12:34:56Z",
+     "version": 1,
+     "type": "Schedule",
+     "data": {
+         "session_id": "486190da-9691-4e52-b085-7e270829766b",
+         "hardwares": [
+            {
+              "id": "hw#1",
+              "hardware_type": "Cooling"
+             },
+            {
+              "id": "hw#2",
+              "hardware_type": "Heating"
+             }
+         ],
+         "steps": [
+             {
+                 "position": 0,
+                 "target_temperature": 20,
+                 "duration": 96,
+             },
+             {
+                 "position": 1,
+                 "target_temperature": 24,
+                 "rate": {
+                     "value": 2,
+                     "duration": 1
+                 },
+                 "duration": 72,
+             },
+             {
+                 "position": 3,
+                 "target_temperature": 2,
+                 "rate": {
+                     "value": 4,
+                     "duration": 6
+                 },
+                 "duration": 48,
+             }
+         ]
+     }
+ }')
 ```
+
+- Run unit tests:
+  `DATABASE_URL=$env.TEST_DATABASE_URL cargo test`

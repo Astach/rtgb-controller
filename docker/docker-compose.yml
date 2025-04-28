@@ -2,7 +2,7 @@ name: "rtgb-scheduler"
 
 networks:
   shared-network: #Referenced in the API's Dockerfile as well so that the API can send commands to the scheduler.
-    name: shared-network
+    name: rtgb-network
     external: false
 services:
   nats:
@@ -43,10 +43,13 @@ services:
     networks:
       - shared-network
     environment:
+      - TEST_USER=${TEST_USER}
+      - TEST_USER_PASSWORD=${TEST_USER_PASSWORD}
       - POSTGRES_SERVICE_USER=${POSTGRES_SERVICE_USER}
       - POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
       - POSTGRES_RTGB_DB=${POSTGRES_RTGB_DB}
-      - POSTGRES_SCHEDULE_TABLE_NAME=${POSTGRES_SCHEDULE_TABLE_NAME}
+      - POSTGRES_COMMAND_TABLE_NAME=${POSTGRES_COMMAND_TABLE_NAME}
+      - POSTGRES_SESSION_TABLE_NAME=${POSTGRES_SESSION_TABLE_NAME}
     ports:
       - "5432:5432"
     command: postgres -c config_file=/etc/postgresql/postgresql.conf

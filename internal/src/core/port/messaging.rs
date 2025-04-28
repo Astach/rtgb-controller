@@ -1,11 +1,26 @@
-use crate::core::domain::message::Message;
+use uuid::Uuid;
+
+use crate::core::domain::{
+    command::NewCommand,
+    message::{Hardware, Message},
+};
 
 pub trait MessageDriverPort {
-    fn process(&self, event: Message);
+    fn process(&self, message: Message) -> impl Future<Output = anyhow::Result<u64>> + Send;
 }
+
 pub trait MessageDrivenPort {
-    fn fetch(&self);
-    fn insert(&self);
-    fn update(&self);
-    fn delete(&self);
+    fn fetch(&self, command_id: Uuid) -> impl Future<Output = Option<NewCommand>> + Send; // FIXME not a new command
+    //here
+
+    fn insert(
+        &self,
+        commands: Vec<NewCommand>,
+        heating_h: Hardware,
+        cooling_h: Hardware,
+    ) -> impl Future<Output = anyhow::Result<u64>> + Send;
+    fn update(&self, command_id: Uuid) -> anyhow::Result<NewCommand>; // FIXME not a new command
+    //here
+    fn delete(&self, command_id: Uuid) -> anyhow::Result<NewCommand>; // FIXME not a new command
+    //here
 }

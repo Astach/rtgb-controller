@@ -1,5 +1,5 @@
 use anyhow::Result;
-use mockall::automock;
+use log::debug;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 use std::{
@@ -55,7 +55,7 @@ pub trait CertificateProvider {
     fn root_ca(&self) -> Result<CertificateDer<'static>>;
 }
 
-#[automock]
+#[cfg_attr(test, mockall::automock)]
 impl CertificateProvider for CertConfig {
     fn get_path_of(&self, cert_type: CertFileType) -> String {
         match cert_type {

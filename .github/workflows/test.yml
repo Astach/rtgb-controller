@@ -10,11 +10,27 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: antoine
+          POSTGRES_PASSWORD: localpassword
+          POSTGRES_DB: rtgb_scheduler
+        ports:
+          - 5432:5432
+        # Health check to wait for postgres to start
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
     steps:
       - uses: actions/checkout@v4
-      - name: Create dummy config file
+      - name: Create test config file
         run: |
-          cp app/config.template.toml app/config.toml
+          cp .github/ci.config.toml app/config.toml
       - name: Run tests
         run: cargo test --verbose
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DB_URL }}
