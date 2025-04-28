@@ -23,8 +23,7 @@ pub struct Event {
 pub struct EventData {
     session_id: Uuid,
     hardwares: Vec<HardwareData>,
-    steps: Vec<FermentationStepData>, // use hashmap to have the fix order of steps instead
-                                      // of relying on array index.
+    steps: Vec<FermentationStepData>,
 }
 #[derive(Deserialize, Debug)]
 pub struct FermentationStepData {

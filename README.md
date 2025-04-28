@@ -34,8 +34,7 @@ _METADATA_
 - Date: When to fire the command
 - Status
   - Planned: The command will be sent
-  - Sent: The command has been sent at `Date`
-  - Acknowledged: The command has been received by the hardware
+  - Running: The command is currently running
   - Executed: The command has been executed, we can move on to the next one.
 
 #### Examples
