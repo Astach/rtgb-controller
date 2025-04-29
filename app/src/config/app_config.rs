@@ -1,12 +1,10 @@
-use anyhow::Result;
-use log::debug;
+use anyhow::{Result, anyhow};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 use std::{
     fs::{self},
     path::Path,
 };
-use thiserror::Error;
 
 use crate::utils::{file::FileUtils, pem::PemUtils};
 
@@ -19,19 +17,14 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load(file_name: &str) -> Result<AppConfig, ConfigError> {
+    pub fn load(file_name: &str) -> anyhow::Result<AppConfig> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let file_path = Path::new(project_root).join(file_name);
-        let content = fs::read_to_string(file_path)?;
-        Ok(toml::from_str(&content)?)
+        let content = fs::read_to_string(file_path)
+            .map_err(|err| anyhow!("Could not read config file: {:?}", err))?;
+        Ok(toml::from_str(&content)
+            .map_err(|err| anyhow!("Could not parse TOML config: {:?}", err))?)
     }
-}
-#[derive(Error, Debug)]
-pub enum ConfigError {
-    #[error("Could not read config file: {0}")]
-    IoError(#[from] std::io::Error),
-    #[error("Could not parse TOML config: {0}")]
-    TomlError(#[from] toml::de::Error),
 }
 
 #[derive(Deserialize, Default, Clone)]

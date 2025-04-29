@@ -4,7 +4,7 @@ use serde_json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use internal::core::domain::{
+use internal::domain::{
     self,
     message::{FermentationStep, Hardware, HardwareType, Rate, ScheduleMessageData},
 };
