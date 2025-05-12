@@ -1,31 +1,34 @@
-use crate::core::domain::command::{CommandStatus, NewCommand, SessionData};
-use crate::core::domain::message::{
+
+use crate::domain::command::{CommandStatus, NewCommand, SessionData};
+use crate::domain::error::MessageServiceError;
+use crate::domain::message::{
     FermentationStep, HardwareType, Message, MessageType, ScheduleMessageData,
 };
-use crate::core::port::messaging::{MessageDrivenPort, MessageDriverPort};
-use anyhow::anyhow;
+use crate::port::messaging::{MessageDrivenPort, MessageDriverPort};
 use log::warn;
 use uuid::Uuid;
-
 pub struct MessageService<R: MessageDrivenPort> {
     repository: R,
 }
 
+
 impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
-    async fn process(&self, message: Message) -> anyhow::Result<u64> {
+    async fn process(&self, message: Message) -> Result<u64, MessageServiceError> {
         match message.message_type {
             MessageType::Schedule(data) => {
                 self.validate(&data.steps)?;
                 let heating = data
                     .get_hardware_of_type(&HardwareType::Heating)
-                    .ok_or(anyhow!("Unable to find heating hardware"))
+                    .ok_or(MessageServiceError::NotFound("heating hardware".into()))
                     .cloned()?;
                 let cooling = data
                     .get_hardware_of_type(&HardwareType::Cooling)
-                    .ok_or(anyhow!("Unable to find cooling hardware"))
+                    .ok_or(MessageServiceError::NotFound(
+                        "Unable to find cooling hardware".into(),
+                    ))
                     .cloned()?;
                 let cmds = self.build_commands(&data)?;
-                self.repository.insert(cmds, heating, cooling).await
+                self.repository.insert(cmds, heating, cooling).await.map_err(|err|MessageServiceError::TechnicalError(format!("{:?}", err.root_cause())))
             }
         }
     }
@@ -34,11 +37,9 @@ impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
 /// IncreaseTemperature the temperature if the step target_temp if higher than the one before
 /// DecreaseTemperature the temperature if the step target_temp if lower than the one before
 impl<R: MessageDrivenPort> MessageService<R> {
-    fn validate(&self, steps: &[FermentationStep]) -> anyhow::Result<bool> {
+    fn validate(&self, steps: &[FermentationStep]) -> Result<bool, MessageServiceError> {
         if steps.is_empty() {
-            return Err(anyhow::anyhow!(
-                "There must be at least a one fermentation step"
-            ));
+            return Err(MessageServiceError::NoFermentationStep);
         }
 
         if steps
@@ -46,9 +47,7 @@ impl<R: MessageDrivenPort> MessageService<R> {
             .find(|s| s.position == 0)
             .is_some_and(|step| step.rate.is_some())
         {
-            return Err(anyhow::anyhow!(
-                "rate can't be defined for the first fermentation step"
-            ));
+            return Err(MessageServiceError::InvalidStepConfiguration(format!("Rate can't be defined for the first fermentation step")));
         }
 
         //TODO must be tested
@@ -59,12 +58,12 @@ impl<R: MessageDrivenPort> MessageService<R> {
                 let previous_step = steps.iter().find(|s| s.position == step.position - 1);
                 let previous_step = match previous_step {
                     Some(prev_step) => prev_step,
-                    None => return Err(anyhow::anyhow!( "Unable to find step with position {:?}", step.position - 1)) 
+                    None => return Err(MessageServiceError::InvalidPosition(step.position - 1)) 
                 };
             let rate_is_valid = self.validate_rate(previous_step, step)?;
             if !rate_is_valid {
                 warn!( "Rate configuration for {:?} is not valid considering the previous step's target temperature of {:?}", step, previous_step.target_temperature);
-                return Err(anyhow::anyhow!( "Rate for {:?} is misconfigured, the final temperature after its execution would not match the whished targeted temperature", step));
+                return Err(MessageServiceError::InvalidRateConfiguration(format!("{:?}",step)));
             }
             Ok(rate_is_valid)
             })
@@ -73,12 +72,10 @@ impl<R: MessageDrivenPort> MessageService<R> {
         &self,
         previous_step: &FermentationStep,
         step: &FermentationStep,
-    ) -> anyhow::Result<bool> {
-        let rate_temp_value = step
-            .rate
-            .as_ref()
-            .map(|rate| i32::from(rate.value))
-            .ok_or(anyhow::anyhow!("Unable to find rate for step {:?}", step))?;
+    ) -> Result<bool, MessageServiceError> {
+        let rate_temp_value = step.rate.as_ref().map(|rate| i32::from(rate.value)).ok_or(
+            MessageServiceError::NotFound(format!("rate for step {:?}", step)),
+        )?;
         let number_of_cmds = self.calculate_rate_commands_number(
             previous_step.target_temperature,
             step.target_temperature,
@@ -122,52 +119,55 @@ impl<R: MessageDrivenPort> MessageService<R> {
     }
 
     // TODO test it
-    fn build_commands(&self, data: &ScheduleMessageData) -> anyhow::Result<Vec<NewCommand>> {
+    fn build_commands(
+        &self,
+        data: &ScheduleMessageData,
+    ) -> Result<Vec<NewCommand>, MessageServiceError> {
         Ok(data
             .steps
             .iter()
-            .flat_map(|step| {
-                step.rate.as_ref().map_or(
-                    vec![self.build_command(
-                        data.session_id,
-                        step.position,
-                        step.target_temperature,
-                        step.duration,
-                    )],
-                    |rate| {
+            .flat_map(|step| -> Result<Vec<NewCommand>, MessageServiceError> {
+                match step.rate.as_ref() {
+                    Some(rate) => {
                         let prev_step = data
                             .steps
                             .iter()
+                            // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen as the first step can't have rate but this is handled just in case and must be tested .
+                            .filter(|s| s.position > 0) 
                             .find(|s| s.position == step.position - 1)
-                            .unwrap();
-                        // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen here but handle it.
-                        // handle unwrap;
-                        let number_of_commands = self.calculate_rate_commands_number(
-                            prev_step.target_temperature,
-                            step.target_temperature,
-                            f32::from(rate.value),
-                        );
-                        (0..number_of_commands)
+                            .ok_or(MessageServiceError::InvalidPosition(step.position -1))?;
+
+                        let number_of_commands = self.calculate_rate_commands_number( prev_step.target_temperature, step.target_temperature, f32::from(rate.value),);
+                        Ok((0..number_of_commands)
                             .map(|r| {
-                                let value =
+                                let delta = (r + 1) as f32 * rate.value as f32;
+                                let target_temp =
                                     if prev_step.target_temperature > step.target_temperature {
-                                        prev_step.target_temperature
-                                            - (r + 1) as f32 * rate.value as f32
+                                        prev_step.target_temperature - delta
                                     } else {
-                                        prev_step.target_temperature
-                                            + (r + 1) as f32 * rate.value as f32
+                                        prev_step.target_temperature + delta
                                     };
                                 self.build_command(
                                     data.session_id,
                                     step.position,
-                                    value,
+                                    target_temp,
                                     rate.duration,
                                 )
                             })
-                            .collect()
+                            .collect())
                     },
-                )
-            })
+                    None => {
+
+                    Ok(vec![self.build_command(
+                        data.session_id,
+                        step.position,
+                        step.target_temperature,
+                        step.duration,
+                    )])
+}
+,
+                }
+            }).flatten()
             .collect())
     }
 }

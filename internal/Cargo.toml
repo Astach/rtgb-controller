@@ -9,11 +9,11 @@ name = "internal"
 path = "src/lib.rs"
 
 [dependencies]
+thiserror = "2.0"
 anyhow.workspace = true
 env_logger.workspace = true
 futures.workspace = true
 log.workspace = true
-thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
 

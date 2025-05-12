@@ -5,7 +5,7 @@ use sqlx::{PgPool, query, query_scalar, types::BigDecimal};
 use time::PrimitiveDateTime;
 use uuid::Uuid;
 
-use internal::core::{
+use internal::{
     domain::{command::NewCommand, message::Hardware},
     port::messaging::MessageDrivenPort,
 };
@@ -124,7 +124,7 @@ impl NewCommandRecord {
 mod tests {
     use std::str::FromStr;
 
-    use internal::core::{
+    use internal::{
         domain::{
             command::NewCommand,
             message::{Hardware, HardwareType},

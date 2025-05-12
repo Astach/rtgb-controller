@@ -9,9 +9,7 @@ use config::app_config::AppConfig;
 use futures::TryStreamExt;
 use inbound::model::event::Event;
 use inbound::nats::Nats;
-use internal::core::{
-    port::messaging::MessageDriverPort, service::message_service::MessageService,
-};
+use internal::{port::messaging::MessageDriverPort, service::message_service::MessageService};
 use log::{debug, error};
 use outbound::postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;

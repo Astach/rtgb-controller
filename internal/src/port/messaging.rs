@@ -1,12 +1,16 @@
 use uuid::Uuid;
 
-use crate::core::domain::{
+use crate::domain::{
     command::NewCommand,
+    error::MessageServiceError,
     message::{Hardware, Message},
 };
 
 pub trait MessageDriverPort {
-    fn process(&self, message: Message) -> impl Future<Output = anyhow::Result<u64>> + Send;
+    fn process(
+        &self,
+        message: Message,
+    ) -> impl Future<Output = Result<u64, MessageServiceError>> + Send;
 }
 
 pub trait MessageDrivenPort {
