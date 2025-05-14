@@ -1,13 +1,11 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
+use internal::domain::message::{
+    FermentationStep, Hardware, HardwareType, Message, MessageType, Rate, ScheduleMessageData,
+};
 use serde::Deserialize;
 use serde_json;
 use time::OffsetDateTime;
 use uuid::Uuid;
-
-use internal::domain::{
-    self,
-    message::{FermentationStep, Hardware, HardwareType, Rate, ScheduleMessageData},
-};
 
 #[derive(Deserialize, Debug)]
 pub struct Event {
@@ -20,11 +18,18 @@ pub struct Event {
     pub data: EventData,
 }
 #[derive(Deserialize, Debug)]
-pub struct EventData {
-    session_id: Uuid,
-    hardwares: Vec<HardwareData>,
-    steps: Vec<FermentationStepData>,
+pub enum EventData {
+    Schedule {
+        session_id: Uuid,
+        hardwares: Vec<HardwareData>,
+        steps: Vec<FermentationStepData>,
+    },
+    Tracking {
+        session_id: Uuid,
+        temperature: f32,
+    },
 }
+
 #[derive(Deserialize, Debug)]
 pub struct FermentationStepData {
     pub position: usize,
@@ -81,42 +86,55 @@ impl TryFrom<&HardwareData> for Hardware {
                 id: value.id.to_string(),
                 hardware_type: HardwareType::Cooling,
             }),
-            _ => Err(anyhow!("Unknown hardware type: {}", value.hardware_type)),
+            _ => bail!("Unknown hardware type: {}", value.hardware_type),
         }
     }
 }
+impl TryFrom<Event> for Message {
+    type Error = anyhow::Error;
 
-impl Event {
-    pub fn to_domain(&self) -> Result<domain::message::Message> {
-        Self::types(self.event_type.as_str(), &self.data).map(|msg_type| domain::message::Message {
-            id: self.id,
-            sent_at: self.sent_at,
-            version: self.version,
-            message_type: msg_type,
+    fn try_from(value: Event) -> std::result::Result<Self, Self::Error> {
+        Ok(match value.event_type.as_str() {
+            "schedule" => Message {
+                id: value.id,
+                sent_at: value.sent_at,
+                version: value.version,
+                message_type: MessageType::Schedule(ScheduleMessageData::try_from(value.data)?),
+            },
+            _ => bail!("Event type {} is not supported", value.event_type),
         })
     }
-    fn types(raw_type: &str, data: &EventData) -> Result<domain::message::MessageType> {
-        Self::hardwares(data).map(|hws| match raw_type.to_lowercase().as_str() {
-            "schedule" => Ok(domain::message::MessageType::Schedule(
-                ScheduleMessageData {
-                    session_id: data.session_id,
-                    hardwares: hws,
-                    steps: Self::steps(&data.steps),
-                },
-            )),
-            _ => Err(anyhow!("Unknown message type: {}", raw_type)),
-        })?
-    }
-    fn hardwares(data: &EventData) -> Result<Vec<Hardware>> {
-        data.hardwares.iter().map(Hardware::try_from).collect()
-    }
-    fn steps(steps: &[FermentationStepData]) -> Vec<FermentationStep> {
-        steps.into_iter().map(FermentationStep::from).collect()
+}
+impl TryFrom<EventData> for ScheduleMessageData {
+    type Error = anyhow::Error;
+
+    fn try_from(value: EventData) -> std::result::Result<Self, Self::Error> {
+        Ok(match value {
+            EventData::Schedule {
+                session_id,
+                hardwares,
+                steps,
+            } => ScheduleMessageData {
+                session_id: session_id,
+                hardwares: hardwares
+                    .iter()
+                    .map(Hardware::try_from)
+                    .collect::<Result<Vec<_>, _>>()?,
+                steps: steps.iter().map(FermentationStep::from).collect(),
+            },
+            EventData::Tracking {
+                session_id,
+                temperature,
+            } => bail!("Cannot convert tracking event data to schedule message data"),
+        })
     }
 }
 #[cfg(test)]
 mod tests {
 
+    use internal::domain::message::{
+        FermentationStep, Hardware, HardwareType, Message, MessageType,
+    };
     use time::OffsetDateTime;
     use uuid::Uuid;
 
@@ -125,8 +143,8 @@ mod tests {
     use super::{Event, EventData};
 
     #[test]
-    fn should_map_event_to_message() {
-        let event_data = EventData {
+    fn should_map_schedule_event_to_message() {
+        let event_data = EventData::Schedule {
             session_id: Uuid::new_v4(),
             hardwares: vec![HardwareData {
                 id: "anId".to_string(),
@@ -146,40 +164,33 @@ mod tests {
             event_type: "schedule".to_string(),
             data: event_data,
         };
-        let msg = event.to_domain().unwrap();
+        let msg = Message::try_from(event).unwrap();
         assert_eq!(msg.sent_at, event.sent_at);
         assert_eq!(msg.version, event.version);
         assert_eq!(msg.id, event.id);
-    }
-
-    #[test]
-    fn should_map_event_type_to_message_type() {
-        let event_data = EventData {
-            session_id: Uuid::new_v4(),
-            hardwares: vec![HardwareData {
-                id: "anId".to_string(),
-                hardware_type: "cooling".to_string(),
-            }],
-            steps: vec![FermentationStepData {
-                position: 0,
-                target_temperature: 21.0,
-                duration: 1,
-                rate: None,
-            }],
-        };
-        Event::types("schedule", &event_data).unwrap();
-        Event::types("SchEdule", &event_data).unwrap();
+        match msg.message_type {
+            MessageType::Schedule(schedule_message_data) => {
+                assert_eq!(schedule_message_data.hardwares.len(), 1);
+                let hw = schedule_message_data.hardwares.first().unwrap();
+                assert_eq!(hw.hardware_type, HardwareType::Cooling);
+                assert_eq!(hw.id, "anId");
+                assert_eq!(schedule_message_data.steps.len(), 1);
+                let step = schedule_message_data.steps.first().unwrap();
+                assert_eq!(step.rate, None);
+                assert_eq!(step.duration, 1);
+                assert_eq!(step.target_temperature, 21.0);
+                assert_eq!(step.position, 0);
+            }
+            MessageType::Tracking(_) => panic!("should be an schedule message"),
+        }
     }
 
     #[test]
     #[should_panic]
     fn should_be_err_on_invalid_event_type() {
-        let event_data = EventData {
+        let event_data = EventData::Schedule {
             session_id: Uuid::new_v4(),
-            hardwares: vec![HardwareData {
-                id: "anId".to_string(),
-                hardware_type: "cooling".to_string(),
-            }],
+            hardwares: vec![],
             steps: vec![FermentationStepData {
                 position: 0,
                 target_temperature: 21.0,
@@ -187,25 +198,24 @@ mod tests {
                 rate: None,
             }],
         };
-        Event::types("takeovertheworld", &event_data).unwrap();
+        let event = Event {
+            id: Uuid::new_v4(),
+            sent_at: OffsetDateTime::now_utc(),
+            version: 1,
+            event_type: "skedule".to_string(),
+            data: event_data,
+        };
+        Message::try_from(event).unwrap();
     }
+
     #[test]
     #[should_panic]
     fn should_be_err_on_invalid_hardware_type() {
-        let event_data = EventData {
-            session_id: Uuid::new_v4(),
-            hardwares: vec![HardwareData {
-                id: "anId".to_string(),
-                hardware_type: "chilling".to_string(),
-            }],
-            steps: vec![FermentationStepData {
-                position: 0,
-                target_temperature: 21.0,
-                duration: 1,
-                rate: None,
-            }],
+        let hardware_data = HardwareData {
+            id: "anId".to_string(),
+            hardware_type: "chilling".to_string(),
         };
-        Event::types("schedule", &event_data).unwrap();
+        Hardware::try_from(&event_data).unwrap();
     }
     #[test]
     fn should_map_event_step_to_fermentation_step() {
@@ -226,20 +236,24 @@ mod tests {
                 }),
             },
         ];
-        Event::steps(&step_data).iter().for_each(|step| {
-            assert_eq!(step.duration, step_data[step.position].duration);
-            assert_eq!(
-                step.target_temperature,
-                step_data[step.position].target_temperature
-            );
-            match (&step.rate, &step_data[step.position].rate) {
-                (None, None) => {} // Pass
-                (Some(r), Some(rd)) => {
-                    assert_eq!(r.value, rd.value);
-                    assert_eq!(r.duration, rd.duration);
+
+        step_data
+            .iter()
+            .flat_map(FermentationStep::try_from)
+            .for_each(|step| {
+                assert_eq!(step.duration, step_data[step.position].duration);
+                assert_eq!(
+                    step.target_temperature,
+                    step_data[step.position].target_temperature
+                );
+                match (&step.rate, &step_data[step.position].rate) {
+                    (None, None) => {} // Pass
+                    (Some(r), Some(rd)) => {
+                        assert_eq!(r.value, rd.value);
+                        assert_eq!(r.duration, rd.duration);
+                    }
+                    _ => panic!("Mismatched Rate options value"),
                 }
-                _ => panic!("Mismatched Rate options value"),
-            }
-        });
+            });
     }
 }

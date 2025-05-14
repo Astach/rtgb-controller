@@ -16,20 +16,21 @@ impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
     async fn process(&self, message: Message) -> Result<u64, MessageServiceError> {
         match message.message_type {
             MessageType::Schedule(data) => {
-                self.validate(&data.steps)?;
-                let heating = data
-                    .get_hardware_of_type(&HardwareType::Heating)
-                    .ok_or(MessageServiceError::NotFound("heating hardware".into()))
-                    .cloned()?;
-                let cooling = data
-                    .get_hardware_of_type(&HardwareType::Cooling)
-                    .ok_or(MessageServiceError::NotFound(
-                        "Unable to find cooling hardware".into(),
-                    ))
-                    .cloned()?;
-                let cmds = self.build_commands(&data)?;
-                self.repository.insert(cmds, heating, cooling).await.map_err(|err|MessageServiceError::TechnicalError(format!("{:?}", err.root_cause())))
-            }
+                        self.validate(&data.steps)?;
+                        let heating = data
+                            .get_hardware_of_type(&HardwareType::Heating)
+                            .ok_or(MessageServiceError::NotFound("heating hardware".into()))
+                            .cloned()?;
+                        let cooling = data
+                            .get_hardware_of_type(&HardwareType::Cooling)
+                            .ok_or(MessageServiceError::NotFound(
+                                "Unable to find cooling hardware".into(),
+                            ))
+                            .cloned()?;
+                        let cmds = self.build_commands(&data)?;
+                        self.repository.insert(cmds, heating, cooling).await.map_err(|err|MessageServiceError::TechnicalError(format!("{:?}", err.root_cause())))
+                    }
+            MessageType::Tracking(tracking_message_data) => todo!(),
         }
     }
 }

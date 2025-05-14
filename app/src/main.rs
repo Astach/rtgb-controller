@@ -9,7 +9,10 @@ use config::app_config::AppConfig;
 use futures::TryStreamExt;
 use inbound::model::event::Event;
 use inbound::nats::Nats;
-use internal::{port::messaging::MessageDriverPort, service::message_service::MessageService};
+use internal::{
+    domain::message::Message, port::messaging::MessageDriverPort,
+    service::message_service::MessageService,
+};
 use log::{debug, error};
 use outbound::postgres::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
@@ -34,7 +37,7 @@ async fn main() -> Result<(), async_nats::Error> {
         let mut messages = consumer.messages().await?;
         while let Some(message) = messages.try_next().await? {
             match Event::try_from(&message)
-                .and_then(|event| event.to_domain())
+                .and_then(Message::try_from)
                 .map(|msg| message_service.process(msg))
             {
                 Ok(fut) => match fut.await {

@@ -12,6 +12,13 @@ pub struct Message {
 #[derive(Debug)]
 pub enum MessageType {
     Schedule(ScheduleMessageData),
+    Tracking(TrackingMessageData),
+}
+
+#[derive(Debug)]
+pub struct TrackingMessageData {
+    pub session_id: Uuid,
+    pub temperature: f32,
 }
 
 #[derive(Debug)]
