@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,4 +16,6 @@ pub enum MessageServiceError {
     InvalidPosition(usize),
     #[error("Something wrong happened {0}")]
     TechnicalError(String),
+    #[error("Unable to convert {0} to {1}")]
+    ConversionError(&'static str, &'static str),
 }

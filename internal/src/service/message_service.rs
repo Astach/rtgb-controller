@@ -1,43 +1,97 @@
-
-use crate::domain::command::{CommandStatus, NewCommand, SessionData};
+use crate::domain::command::{Command, CommandStatus, NewCommand, SessionData};
 use crate::domain::error::MessageServiceError;
 use crate::domain::message::{
     FermentationStep, HardwareType, Message, MessageType, ScheduleMessageData,
 };
+use crate::domain::sorting::{QueryOptions, Sorting};
 use crate::port::messaging::{MessageDrivenPort, MessageDriverPort};
+use crate::port::publisher::PublisherDrivenPort;
 use log::warn;
+use time::OffsetDateTime;
 use uuid::Uuid;
-pub struct MessageService<R: MessageDrivenPort> {
+pub struct MessageService<R: MessageDrivenPort, P: PublisherDrivenPort> {
     repository: R,
+    publisher: P,
 }
 
-
-impl<R: MessageDrivenPort + Sync> MessageDriverPort for MessageService<R> {
+// FIXME the logic between schedule and tracking should most likely be split later on.
+impl<R: MessageDrivenPort + Sync, P: PublisherDrivenPort> MessageDriverPort
+    for MessageService<R, P>
+{
     async fn process(&self, message: Message) -> Result<u64, MessageServiceError> {
         match message.message_type {
             MessageType::Schedule(data) => {
-                        self.validate(&data.steps)?;
-                        let heating = data
-                            .get_hardware_of_type(&HardwareType::Heating)
-                            .ok_or(MessageServiceError::NotFound("heating hardware".into()))
-                            .cloned()?;
-                        let cooling = data
-                            .get_hardware_of_type(&HardwareType::Cooling)
-                            .ok_or(MessageServiceError::NotFound(
-                                "Unable to find cooling hardware".into(),
-                            ))
-                            .cloned()?;
-                        let cmds = self.build_commands(&data)?;
-                        self.repository.insert(cmds, heating, cooling).await.map_err(|err|MessageServiceError::TechnicalError(format!("{:?}", err.root_cause())))
+                self.validate(&data.steps)?;
+                let heating = data
+                    .get_hardware_of_type(&HardwareType::Heating)
+                    .ok_or(MessageServiceError::NotFound("heating hardware".into()))
+                    .cloned()?;
+                let cooling = data
+                    .get_hardware_of_type(&HardwareType::Cooling)
+                    .ok_or(MessageServiceError::NotFound(
+                        "Unable to find cooling hardware".into(),
+                    ))
+                    .cloned()?;
+                let cmds = self.build_commands(&data)?;
+                self.repository
+                    .insert(cmds, heating, cooling)
+                    .await
+                    .map_err(|err| {
+                        MessageServiceError::TechnicalError(format!("{:?}", err.root_cause()))
+                    })
+            }
+            //check for running cmds,
+            //if some -> check if update must be made.
+            //if none -> check for planned actions.
+            //           if some -> update status to running, check if need to send updates via event?
+            //           if none -> all commands have been processed already, nothing to do.
+            //           (should not happen unless tracking hasen't been stopped on the last
+            //           command executed for some reason).
+            MessageType::Tracking(tracking_message_data) => {
+                let status = CommandStatus::Running {
+                    since: OffsetDateTime::now_utc(),
+                };
+                let running_cmds = self
+                    .fetch_command(tracking_message_data.session_id, &status)
+                    .await?;
+
+                if running_cmds.is_empty() {
+                    let planned_cmds = self
+                        .fetch_command(tracking_message_data.session_id, &CommandStatus::Planned)
+                        .await?;
+                    if planned_cmds.is_empty() {
+                        todo!("Nothing to do here");
+                    } else {
+                        // make sure there's only 1
+                        self.publisher
+                            .publish(planned_cmds.first().unwrap())
+                            .await
+                            .map_err(|e| {
+                                MessageServiceError::TechnicalError(format!(
+                                    "Unable to publish: {:?}",
+                                    e
+                                ))
+                            })?;
+                        self.repository.update(
+                            tracking_message_data.session_id,
+                            CommandStatus::Running {
+                                since: OffsetDateTime::now_utc(),
+                            },
+                        );
+                        todo!("Launch command, update status to running");
                     }
-            MessageType::Tracking(tracking_message_data) => todo!(),
+                } else {
+                    todo!("Check if action must be performed (if target temp reached etc..)")
+                };
+                todo!()
+            }
         }
     }
 }
 /// StartFermentation if we're at the first fermentation step
 /// IncreaseTemperature the temperature if the step target_temp if higher than the one before
 /// DecreaseTemperature the temperature if the step target_temp if lower than the one before
-impl<R: MessageDrivenPort> MessageService<R> {
+impl<R: MessageDrivenPort, P: PublisherDrivenPort> MessageService<R, P> {
     fn validate(&self, steps: &[FermentationStep]) -> Result<bool, MessageServiceError> {
         if steps.is_empty() {
             return Err(MessageServiceError::NoFermentationStep);
@@ -48,7 +102,9 @@ impl<R: MessageDrivenPort> MessageService<R> {
             .find(|s| s.position == 0)
             .is_some_and(|step| step.rate.is_some())
         {
-            return Err(MessageServiceError::InvalidStepConfiguration(format!("Rate can't be defined for the first fermentation step")));
+            return Err(MessageServiceError::InvalidStepConfiguration(format!(
+                "Rate can't be defined for the first fermentation step"
+            )));
         }
 
         //TODO must be tested
@@ -59,7 +115,7 @@ impl<R: MessageDrivenPort> MessageService<R> {
                 let previous_step = steps.iter().find(|s| s.position == step.position - 1);
                 let previous_step = match previous_step {
                     Some(prev_step) => prev_step,
-                    None => return Err(MessageServiceError::InvalidPosition(step.position - 1)) 
+                    None => return Err(MessageServiceError::InvalidPosition(step.position - 1))
                 };
             let rate_is_valid = self.validate_rate(previous_step, step)?;
             if !rate_is_valid {
@@ -134,11 +190,15 @@ impl<R: MessageDrivenPort> MessageService<R> {
                             .steps
                             .iter()
                             // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen as the first step can't have rate but this is handled just in case and must be tested .
-                            .filter(|s| s.position > 0) 
+                            .filter(|s| s.position > 0)
                             .find(|s| s.position == step.position - 1)
-                            .ok_or(MessageServiceError::InvalidPosition(step.position -1))?;
+                            .ok_or(MessageServiceError::InvalidPosition(step.position - 1))?;
 
-                        let number_of_commands = self.calculate_rate_commands_number( prev_step.target_temperature, step.target_temperature, f32::from(rate.value),);
+                        let number_of_commands = self.calculate_rate_commands_number(
+                            prev_step.target_temperature,
+                            step.target_temperature,
+                            f32::from(rate.value),
+                        );
                         Ok((0..number_of_commands)
                             .map(|r| {
                                 let delta = (r + 1) as f32 * rate.value as f32;
@@ -156,25 +216,37 @@ impl<R: MessageDrivenPort> MessageService<R> {
                                 )
                             })
                             .collect())
-                    },
-                    None => {
-
-                    Ok(vec![self.build_command(
+                    }
+                    None => Ok(vec![self.build_command(
                         data.session_id,
                         step.position,
                         step.target_temperature,
                         step.duration,
-                    )])
-}
-,
+                    )]),
                 }
-            }).flatten()
+            })
+            .flatten()
             .collect())
+    }
+
+    async fn fetch_command(
+        &self,
+        session_id: Uuid,
+        status: &CommandStatus,
+    ) -> Result<Vec<Command>, MessageServiceError> {
+        let options = QueryOptions::new(Some(1), Sorting::DESC);
+        self.repository
+            .fetch(session_id, status, options)
+            .await
+            .map_err(|err| MessageServiceError::TechnicalError(format!("{:?}", err.root_cause())))
     }
 }
 
-impl<R: MessageDrivenPort> MessageService<R> {
-    pub fn new(repository: R) -> Self {
-        Self { repository }
+impl<R: MessageDrivenPort, P: PublisherDrivenPort> MessageService<R, P> {
+    pub fn new(repository: R, publisher: P) -> Self {
+        Self {
+            repository,
+            publisher,
+        }
     }
 }

@@ -1,13 +1,14 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use internal::domain::message::{
     FermentationStep, Hardware, HardwareType, Message, MessageType, Rate, ScheduleMessageData,
+    TrackingMessageData,
 };
 use serde::Deserialize;
 use serde_json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Event {
     pub id: Uuid,
     #[serde(with = "time::serde::rfc3339")]
@@ -17,7 +18,7 @@ pub struct Event {
     pub event_type: String,
     pub data: EventData,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum EventData {
     Schedule {
         session_id: Uuid,
@@ -30,20 +31,20 @@ pub enum EventData {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct FermentationStepData {
     pub position: usize,
     pub target_temperature: f32,
     pub duration: u8,
     pub rate: Option<RateData>,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct RateData {
     value: u8,
     duration: u8,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct HardwareData {
     hardware_type: String,
     id: String,
@@ -73,10 +74,10 @@ impl From<&FermentationStepData> for FermentationStep {
         }
     }
 }
-impl TryFrom<&HardwareData> for Hardware {
+impl TryFrom<HardwareData> for Hardware {
     type Error = anyhow::Error;
 
-    fn try_from(value: &HardwareData) -> anyhow::Result<Self, Self::Error> {
+    fn try_from(value: HardwareData) -> anyhow::Result<Self, Self::Error> {
         match value.hardware_type.to_lowercase().as_str() {
             "heating" => Ok(Hardware {
                 id: value.id.to_string(),
@@ -101,7 +102,32 @@ impl TryFrom<Event> for Message {
                 version: value.version,
                 message_type: MessageType::Schedule(ScheduleMessageData::try_from(value.data)?),
             },
+            "tracking" => Message {
+                id: value.id,
+                sent_at: value.sent_at,
+                version: value.version,
+                message_type: MessageType::Tracking(TrackingMessageData::try_from(value.data)?),
+            },
             _ => bail!("Event type {} is not supported", value.event_type),
+        })
+    }
+}
+
+impl TryFrom<EventData> for TrackingMessageData {
+    type Error = anyhow::Error;
+
+    fn try_from(value: EventData) -> std::result::Result<Self, Self::Error> {
+        Ok(match value {
+            EventData::Schedule { .. } => {
+                bail!("Cannot convert schedule event data to tracking message data")
+            }
+            EventData::Tracking {
+                session_id,
+                temperature,
+            } => TrackingMessageData {
+                session_id,
+                temperature,
+            },
         })
     }
 }
@@ -117,15 +143,14 @@ impl TryFrom<EventData> for ScheduleMessageData {
             } => ScheduleMessageData {
                 session_id: session_id,
                 hardwares: hardwares
-                    .iter()
+                    .into_iter()
                     .map(Hardware::try_from)
-                    .collect::<Result<Vec<_>, _>>()?,
+                    .collect::<Result<Vec<Hardware>, _>>()?,
                 steps: steps.iter().map(FermentationStep::from).collect(),
             },
-            EventData::Tracking {
-                session_id,
-                temperature,
-            } => bail!("Cannot convert tracking event data to schedule message data"),
+            EventData::Tracking { .. } => {
+                bail!("Cannot convert tracking event data to schedule message data")
+            }
         })
     }
 }
@@ -164,7 +189,7 @@ mod tests {
             event_type: "schedule".to_string(),
             data: event_data,
         };
-        let msg = Message::try_from(event).unwrap();
+        let msg = Message::try_from(event.clone()).unwrap();
         assert_eq!(msg.sent_at, event.sent_at);
         assert_eq!(msg.version, event.version);
         assert_eq!(msg.id, event.id);
@@ -215,7 +240,7 @@ mod tests {
             id: "anId".to_string(),
             hardware_type: "chilling".to_string(),
         };
-        Hardware::try_from(&event_data).unwrap();
+        Hardware::try_from(hardware_data).unwrap();
     }
     #[test]
     fn should_map_event_step_to_fermentation_step() {

@@ -1,17 +1,23 @@
-[nats]
+[nats.client]
 host = "127.0.0.1"
 port = 4222
+
+[nats.client.cert]
+absolute_folder_path = "/home/certs"
+key_file_name = "client.key"
+cert_file_name = "client.crt"
+root_ca_file_name = "ca.crt"
 
 [nats.consumer]
 subjects = ["a-suject", "another"]
 delivery_subject = "delivery-subject"
 name = "consumer-name"
 
-[nats.cert]
-absolute_folder_path = "/home/certs"
-key_file_name = "client.key"
-cert_file_name = "client.crt"
-root_ca_file_name = "ca.crt"
+[nats.publisher]
+subjects = ["a-suject", "another"]
+delivery_subject = "delivery-subject"
+name = "publisher-name"
+
 
 [postgres]
 database = "db_name"
