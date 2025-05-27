@@ -1,10 +1,6 @@
-use std::{
-    fmt::{Debug, format},
-    str::FromStr,
-};
+use std::str::FromStr;
 
 use anyhow::bail;
-use async_nats::jetstream::new;
 use bigdecimal::ToPrimitive;
 use log::debug;
 use sqlx::{PgPool, query, query_as, query_scalar, types::BigDecimal};
@@ -14,21 +10,21 @@ use uuid::Uuid;
 use internal::{
     domain::{
         command::{Command, CommandStatus, CommandTemperatureData, NewCommand},
-        error::MessageServiceError,
+        error::CommandSchedulerServiceError,
         message::Hardware,
-        sorting::{self, QueryOptions, Sorting},
+        sorting::QueryOptions,
     },
-    port::messaging::MessageDrivenPort,
+    port::command::CommandDrivenPort,
 };
 
-pub struct MessageRepository<'a> {
-    pub pool: &'a PgPool,
-    command_table: &'a str,
-    session_table: &'a str,
+pub struct CommandRepository {
+    pub pool: PgPool,
+    command_table: &'static str,
+    session_table: &'static str,
 }
 
-impl<'a> MessageRepository<'a> {
-    pub fn new(pool: &'a PgPool) -> Self {
+impl CommandRepository {
+    pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
             command_table: "command",
@@ -37,16 +33,9 @@ impl<'a> MessageRepository<'a> {
     }
 }
 
-impl MessageDrivenPort for MessageRepository<'_> {
-    async fn insert(
-        &self,
-        commands: Vec<NewCommand>,
-        heating_h: Hardware,
-        cooling_h: Hardware,
-    ) -> anyhow::Result<u64> {
-        let c = commands
-            .first()
-            .ok_or(anyhow::anyhow!("No command to insert"))?;
+impl CommandDrivenPort for CommandRepository {
+    async fn insert(&self, commands: Vec<NewCommand>, heating_h: Hardware, cooling_h: Hardware) -> anyhow::Result<u64> {
+        let c = commands.first().ok_or(anyhow::anyhow!("No command to insert"))?;
         let sql_query = format!(
             "INSERT INTO {:?} (uuid, cooling_id, heating_id) VALUES ($1,$2,$3) RETURNING id",
             self.session_table
@@ -55,7 +44,7 @@ impl MessageDrivenPort for MessageRepository<'_> {
             .bind(c.session_data.id)
             .bind(heating_h.id)
             .bind(cooling_h.id)
-            .fetch_one(self.pool)
+            .fetch_one(&self.pool)
             .await?;
         debug!("Inserted session with id {session_record_id}");
         let records = commands
@@ -78,7 +67,7 @@ impl MessageDrivenPort for MessageRepository<'_> {
                     .bind(None as Option<PrimitiveDateTime>)
                     .bind(rec.value_holding_duration)
                     .bind(rec.session_id)
-                    .execute(self.pool)
+                    .execute(&self.pool)
             })
             .collect();
 
@@ -93,14 +82,9 @@ impl MessageDrivenPort for MessageRepository<'_> {
     }
 
     async fn fetch(
-        &self,
-        session_uuid: Uuid,
-        status: &CommandStatus,
-        options: QueryOptions,
+        &self, session_uuid: Uuid, status: &CommandStatus, options: QueryOptions,
     ) -> anyhow::Result<Vec<Command>> {
-        let limit = options
-            .limit
-            .map_or("".to_string(), |n| format!("LIMIT {}", n));
+        let limit = options.limit.map_or("".to_string(), |n| format!("LIMIT {}", n));
         let sql_query = format!(
             r#"SELECT 
                 {command_table}.uuid,
@@ -126,17 +110,13 @@ impl MessageDrivenPort for MessageRepository<'_> {
         let res: Vec<CommandRecord> = query_as(&sql_query)
             .bind(status.name())
             .bind(session_uuid)
-            .fetch_all(self.pool)
+            .fetch_all(&self.pool)
             .await?;
         res.iter().map(Command::try_from).collect()
     }
 
-    async fn update(
-        &self,
-        session_uuid: Uuid,
-        new_status: CommandStatus,
-    ) -> anyhow::Result<Command> {
-        let date = match new_status {
+    async fn update(&self, command: Command) -> anyhow::Result<Command> {
+        let date = match command.status {
             CommandStatus::Planned => bail!("Command can't be updated to Planned"),
             CommandStatus::Running { since } => since,
             CommandStatus::Executed { at } => at,
@@ -146,20 +126,19 @@ impl MessageDrivenPort for MessageRepository<'_> {
             r#"UPDATE {command_table}
         SET
             status = $1,
-            status_date = $2
-        FROM {session_table} 
-        WHERE {command_table}.session_id = {session_table}.id 
-        AND {session_table}.uuid = $3
+            status_date = $2,
+            value_reached_at = $3
+        WHERE {command_table}.uuid = $4
         RETURNING {command_table}.*"#,
             command_table = self.command_table,
-            session_table = self.session_table
         );
 
         let updated_command_record: CommandRecord = query_as(&sql_query)
-            .bind(new_status.name())
+            .bind(command.status.name())
             .bind(date)
-            .bind(session_uuid)
-            .fetch_one(self.pool)
+            .bind(command.temparature_data.value_reached_at)
+            .bind(command.uuid)
+            .fetch_one(&self.pool)
             .await?;
         Command::try_from(&updated_command_record)
     }
@@ -181,21 +160,22 @@ struct CommandRecord {
     pub session_id: i32,
 }
 impl CommandRecord {
-    fn status_to_command_status(
-        &self,
-        date: Option<PrimitiveDateTime>,
-    ) -> anyhow::Result<CommandStatus> {
+    fn status_to_command_status(&self, date: Option<PrimitiveDateTime>) -> anyhow::Result<CommandStatus> {
         Ok(match self.status.as_str() {
             "Planned" => CommandStatus::Planned,
-            "Running" => CommandStatus::Running {
-                since: date.map(|d| d.assume_offset(UtcOffset::UTC)).ok_or(
-                    MessageServiceError::NotFound("date for running command status".to_string()),
-                )?,
-            },
+            "Running" => {
+                CommandStatus::Running {
+                    since: date.map(|d| d.assume_offset(UtcOffset::UTC)).ok_or(
+                        CommandSchedulerServiceError::NotFound("date for running command status".to_string()),
+                    )?,
+                }
+            }
             "Executed" => CommandStatus::Executed {
-                at: date.map(|d| d.assume_offset(UtcOffset::UTC)).ok_or(
-                    MessageServiceError::NotFound("date for executed command status".to_string()),
-                )?,
+                at: date
+                    .map(|d| d.assume_offset(UtcOffset::UTC))
+                    .ok_or(CommandSchedulerServiceError::NotFound(
+                        "date for executed command status".to_string(),
+                    ))?,
             },
             _ => bail!("{} is not a valid status", self.status.as_str()),
         })
@@ -213,12 +193,12 @@ impl TryFrom<&CommandRecord> for Command {
                 value: record
                     .value
                     .to_f32()
-                    .ok_or(MessageServiceError::ConversionError("record value", "f32"))?,
+                    .ok_or(CommandSchedulerServiceError::ConversionError("record value", "f32"))?,
                 value_reached_at: record
                     .value_reached_at
                     .map(|p_date| p_date.assume_offset(UtcOffset::UTC)),
                 value_holding_duration: record.value_holding_duration.to_u8().ok_or(
-                    MessageServiceError::ConversionError("record.value_holding_duration", "f32"),
+                    CommandSchedulerServiceError::ConversionError("record.value_holding_duration", "f32"),
                 )?,
             },
             session_id: record.session_id,
@@ -255,21 +235,19 @@ impl NewCommandRecord {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, str::FromStr};
+    use std::str::FromStr;
 
-    use crate::outbound::postgres::CommandRecord;
-
-    use super::{MessageRepository, NewCommandRecord};
+    use super::{CommandRepository, NewCommandRecord};
     use internal::{
         domain::{
-            command::{Command, CommandStatus, NewCommand},
+            command::{Command, CommandStatus, CommandTemperatureData, NewCommand},
             message::{Hardware, HardwareType},
             sorting::{QueryOptions, Sorting},
         },
-        port::messaging::MessageDrivenPort,
+        port::command::CommandDrivenPort,
     };
-    use sqlx::{PgPool, query, query_scalar, types::BigDecimal};
-    use time::{OffsetDateTime, PrimitiveDateTime};
+    use sqlx::{PgPool, types::BigDecimal};
+    use time::OffsetDateTime;
     use uuid::Uuid;
 
     #[test]
@@ -286,7 +264,7 @@ mod tests {
     }
     #[sqlx::test(migrations = "./migrations")]
     async fn should_insert_commands(pool: PgPool) -> anyhow::Result<()> {
-        let repo = MessageRepository::new(&pool);
+        let repo = CommandRepository::new(pool);
         let cmds = vec![NewCommand::default()];
         let heating_h = Hardware::new(String::from("heating_id"), HardwareType::Heating);
         let cooling_h = Hardware::new(String::from("cooling_id"), HardwareType::Cooling);
@@ -297,7 +275,7 @@ mod tests {
 
     #[sqlx::test(migrations = "./migrations", fixtures("session", "command"))]
     async fn should_fetch_commands(pool: PgPool) -> anyhow::Result<()> {
-        let repo = MessageRepository::new(&pool);
+        let repo = CommandRepository::new(pool);
 
         let result = repo
             .fetch(
@@ -316,26 +294,32 @@ mod tests {
         Ok(())
     }
     #[sqlx::test(migrations = "./migrations", fixtures("session", "command"))]
-    async fn should_update_command_status(pool: PgPool) -> anyhow::Result<()> {
-        let repo = MessageRepository::new(&pool);
-        let since = {
+    async fn should_update_command(pool: PgPool) -> anyhow::Result<()> {
+        let repo = CommandRepository::new(pool);
+        let date = {
             let dt = OffsetDateTime::now_utc();
             let microseconds = dt.nanosecond() / 1000;
             dt.replace_nanosecond(microseconds * 1000).unwrap()
         };
-        let result = repo
-            .update(
-                Uuid::parse_str("871b888e-2185-4bb8-b8b0-f87d4be4c133").unwrap(),
-                CommandStatus::Running { since },
-            )
-            .await;
-        let result = result.unwrap();
-        assert_eq!(result.session_id, 1);
-        assert_eq!(result.fermentation_step_id, 1);
-        assert_eq!(result.temparature_data.value, 20.4);
-        assert_eq!(result.temparature_data.value_reached_at, None);
-        assert_eq!(result.temparature_data.value_holding_duration, 1);
-        assert_eq!(result.status, CommandStatus::Running { since });
+        let command = Command {
+            uuid: Uuid::parse_str("23bc0b04-05a4-4d28-a82d-2cc640fb3042").unwrap(),
+            fermentation_step_id: 1,
+            status: CommandStatus::Running { since: date },
+            session_id: 2,
+            temparature_data: CommandTemperatureData {
+                value: 18.4,
+                value_reached_at: Some(date),
+                value_holding_duration: 7,
+            },
+        };
+
+        let result = repo.update(command).await.unwrap();
+        assert_eq!(result.session_id, 1); //this field is not updatable
+        assert_eq!(result.fermentation_step_id, 1); //this field is not updatable
+        assert_eq!(result.temparature_data.value, 20.4); //this field is not updatable
+        assert_eq!(result.temparature_data.value_holding_duration, 1); //this field is not updatable
+        assert_eq!(result.temparature_data.value_reached_at, Some(date));
+        assert_eq!(result.status, CommandStatus::Running { since: date });
         assert_eq!(
             result.uuid,
             Uuid::parse_str("23bc0b04-05a4-4d28-a82d-2cc640fb3042").unwrap()

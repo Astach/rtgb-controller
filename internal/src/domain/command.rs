@@ -14,7 +14,7 @@ pub struct NewCommand {
     pub value_holding_duration: u8,
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Command {
     pub uuid: Uuid,
     pub fermentation_step_id: i32,
@@ -22,26 +22,35 @@ pub struct Command {
     pub session_id: i32,
     pub temparature_data: CommandTemperatureData,
 }
+impl Command {
+    pub fn status(mut self, command_status: CommandStatus) -> Self {
+        self.status = command_status;
+        self
+    }
+    pub fn value_reached_at(mut self, reached_at: OffsetDateTime) -> Self {
+        self.temparature_data.value_reached_at = Some(reached_at);
+        self
+    }
+}
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct CommandTemperatureData {
     pub value: f32,
     pub value_reached_at: Option<OffsetDateTime>,
     pub value_holding_duration: u8,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub enum CommandStatus {
+    #[default]
     Planned,
-    Running { since: OffsetDateTime },
+    Running {
+        since: OffsetDateTime,
+    },
     // next one
-    Executed { at: OffsetDateTime }, // when the target_temp is reached and optional duration passed
-}
-
-impl Default for CommandStatus {
-    fn default() -> Self {
-        CommandStatus::Planned
-    }
+    Executed {
+        at: OffsetDateTime,
+    }, // when the target_temp is reached and optional duration passed
 }
 
 impl CommandStatus {
