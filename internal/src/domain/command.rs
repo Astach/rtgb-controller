@@ -1,4 +1,5 @@
 use core::str;
+use time::Duration;
 
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -11,7 +12,7 @@ pub struct NewCommand {
     pub session_data: SessionData,
     pub status: CommandStatus,
     pub value: f32,
-    pub value_holding_duration: u8,
+    pub value_holding_duration: Duration,
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
@@ -20,24 +21,14 @@ pub struct Command {
     pub fermentation_step_id: i32,
     pub status: CommandStatus,
     pub session_id: i32,
-    pub temparature_data: CommandTemperatureData,
-}
-impl Command {
-    pub fn status(mut self, command_status: CommandStatus) -> Self {
-        self.status = command_status;
-        self
-    }
-    pub fn value_reached_at(mut self, reached_at: OffsetDateTime) -> Self {
-        self.temparature_data.value_reached_at = Some(reached_at);
-        self
-    }
+    pub temperature_data: CommandTemperatureData,
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct CommandTemperatureData {
     pub value: f32,
     pub value_reached_at: Option<OffsetDateTime>,
-    pub value_holding_duration: u8,
+    pub value_holding_duration: Duration,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]

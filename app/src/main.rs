@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_nats::jetstream;
-use config::app_config::{self, AppConfig};
+use config::app_config::AppConfig;
 use futures::TryStreamExt;
 use inbound::model::event::Event;
 use inbound::nats::NatsConsumer;
@@ -26,6 +26,7 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::sync::OnceCell;
 use utils::pem::PemUtils;
 static CMD_REPOSITORY: OnceCell<Arc<CommandRepository>> = OnceCell::const_new();
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
@@ -37,7 +38,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let client = nats.connect().await.unwrap();
     let consumer = NatsConsumer::new(conf.nats.consumer).unwrap();
     let context = jetstream::new(client.clone());
-    let consumer = consumer.create_consumer(context).await?;
+    let consumer = consumer.create_consumer(&context).await?;
 
     let cmd_repository = CMD_REPOSITORY
         .get_or_init(async || {
@@ -48,7 +49,7 @@ async fn main() -> Result<(), anyhow::Error> {
             Arc::new(CommandRepository::new(pool))
         })
         .await;
-    let nats_publisher = NatsPublisher::new(conf.nats.publisher);
+    let nats_publisher = NatsPublisher::new(client, conf.nats.publisher);
     let scheduler_service = CommandSchedulerService::new(cmd_repository.clone());
     let executor_service = CommandExecutorService::new(cmd_repository.clone(), nats_publisher);
 

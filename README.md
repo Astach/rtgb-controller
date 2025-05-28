@@ -135,7 +135,6 @@ tls {
 
 ```bash
 export DATABASE_URL="postgres@..." # used by sqlx to check query at compile time
-export TEST_DATABASE_URL="postgres://$(whoami)@localhost/rtgb_scheduler"
 export NATS_URL=nats://localhost:4222
 export NATS_CA=/path/to/certs/ca.crt
 export NATS_CERT=/path/to/certs/client.crt
@@ -254,4 +253,4 @@ nats publish fermentation.schedule.command ('{
 ```
 
 - Run unit tests:
-  `DATABASE_URL=$env.TEST_DATABASE_URL cargo test`
+  `cargo nextest run --profile test`

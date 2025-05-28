@@ -22,6 +22,8 @@ pub enum CommandSchedulerServiceError {
 
 #[derive(Error, Debug)]
 pub enum CommandExecutorServiceError {
+    #[error("Unable to find: {0}")]
+    NotFound(String),
     #[error("Something wrong happened {0}")]
     TechnicalError(String),
     #[error("Only Planned command can be executed")]

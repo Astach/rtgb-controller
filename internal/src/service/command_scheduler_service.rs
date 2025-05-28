@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use log::warn;
+use time::Duration;
 use uuid::Uuid;
 
 use crate::{
@@ -96,7 +97,7 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
         let delta = (previous_target_temp - next_target_temp).abs();
         (delta / rate).ceil() as i32
     }
-    fn build_command(session_id: Uuid, position: usize, target_temp: f32, duration: u8) -> NewCommand {
+    fn build_command(session_id: Uuid, position: usize, target_temp: f32, duration: Duration) -> NewCommand {
         NewCommand {
             id: Uuid::new_v4(),
             sent_at: None,

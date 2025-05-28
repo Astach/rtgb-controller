@@ -7,9 +7,7 @@ pub struct NatsClient {
     pub client_config: NatsClientConf,
 }
 impl NatsClient {
-    fn client_configuration(
-        certificate_provider: &impl CertificateProvider,
-    ) -> Result<ClientConfig> {
+    fn client_configuration(certificate_provider: &impl CertificateProvider) -> Result<ClientConfig> {
         let mut store = RootCertStore::empty();
         let ca = certificate_provider.root_ca().unwrap();
         let cert = certificate_provider.certificate().unwrap();
@@ -22,10 +20,7 @@ impl NatsClient {
     }
 
     pub async fn connect(&self) -> Result<async_nats::Client> {
-        let address = format!(
-            "tls://{}:{}",
-            self.client_config.host, self.client_config.port
-        );
+        let address = format!("tls://{}:{}", self.client_config.host, self.client_config.port);
         let options = ConnectOptions::new()
             .tls_client_config(NatsClient::client_configuration(&self.client_config.cert).unwrap())
             .require_tls(true)
@@ -54,13 +49,11 @@ mod test {
         let mut cert_config = MockCertConfig::new();
         // Generate root CA
         let subject_name = "Root CA";
-        let root_certified_keys =
-            generate_simple_self_signed(vec![subject_name.to_string()]).unwrap();
+        let root_certified_keys = generate_simple_self_signed(vec![subject_name.to_string()]).unwrap();
 
         // Generate client certificate
         let subject_name = "Client Certificate";
-        let client_certified_keys =
-            generate_simple_self_signed(vec![subject_name.to_string()]).unwrap();
+        let client_certified_keys = generate_simple_self_signed(vec![subject_name.to_string()]).unwrap();
         let pk = client_certified_keys.key_pair.serialized_der().to_owned();
         cert_config
             .expect_root_ca()

@@ -14,9 +14,7 @@ delivery_subject = "delivery-subject"
 name = "consumer-name"
 
 [nats.publisher]
-subjects = ["a-suject", "another"]
-delivery_subject = "delivery-subject"
-name = "publisher-name"
+command_topic_template = "shellies/<model>-<deviceid>/relay/0/command"
 
 
 [postgres]

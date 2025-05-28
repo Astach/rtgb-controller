@@ -6,21 +6,20 @@ use async_nats::{
     jetstream::{self, stream},
 };
 
-use crate::config::nats_config::StreamConfig;
+use crate::config::nats_config::ConsumerConfig;
 
 pub struct NatsConsumer {
-    stream_config: StreamConfig,
+    consumer_config: ConsumerConfig,
 }
 impl NatsConsumer {
-    pub fn new(stream_config: StreamConfig) -> Result<NatsConsumer> {
+    pub fn new(stream_config: ConsumerConfig) -> Result<NatsConsumer> {
         Ok(NatsConsumer {
-            stream_config: stream_config,
+            consumer_config: stream_config,
         })
     }
 
     pub async fn create_consumer(
-        &self,
-        context: async_nats::jetstream::Context,
+        &self, context: &async_nats::jetstream::Context,
     ) -> Result<jetstream::consumer::Consumer<jetstream::consumer::pull::Config>> {
         context
             .create_stream(self.stream_config())
@@ -33,27 +32,25 @@ impl NatsConsumer {
 
     fn stream_config(&self) -> jetstream::stream::Config {
         jetstream::stream::Config {
-            name: self.stream_config.name.to_string(),
-            subjects: self.stream_config.subjects.clone(),
+            name: self.consumer_config.name.to_string(),
+            subjects: self.consumer_config.subjects.clone(),
             retention: stream::RetentionPolicy::WorkQueue,
             ..Default::default()
         }
     }
     fn consumer_config(&self) -> jetstream::consumer::pull::Config {
         jetstream::consumer::pull::Config {
-            durable_name: Some(self.stream_config.name.to_string()),
-            filter_subjects: self.stream_config.subjects.to_owned(),
+            durable_name: Some(self.consumer_config.name.to_string()),
+            filter_subjects: self.consumer_config.subjects.to_owned(),
             ..Default::default()
         }
     }
     pub async fn subscribe(
-        &self,
-        client: &async_nats::Client,
+        &self, client: &async_nats::Client,
     ) -> BoxFuture<'static, Result<Subscriber, SubscribeError>> {
-        let sub = self.stream_config.delivery_subject.to_string();
+        let sub = self.consumer_config.delivery_subject.to_string();
         let client = client.clone();
-        Box::pin(async move { client.subscribe(sub).await })
-            as BoxFuture<'static, Result<Subscriber, SubscribeError>>
+        Box::pin(async move { client.subscribe(sub).await }) as BoxFuture<'static, Result<Subscriber, SubscribeError>>
     }
 }
 

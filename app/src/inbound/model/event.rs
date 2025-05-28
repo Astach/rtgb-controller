@@ -1,11 +1,10 @@
 use anyhow::{Result, bail};
 use internal::domain::message::{
-    FermentationStep, Hardware, HardwareType, Message, MessageType, Rate, ScheduleMessageData,
-    TrackingMessageData,
+    FermentationStep, Hardware, HardwareType, Message, MessageType, Rate, ScheduleMessageData, TrackingMessageData,
 };
 use serde::Deserialize;
 use serde_json;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -35,13 +34,13 @@ pub enum EventData {
 pub struct FermentationStepData {
     pub position: usize,
     pub target_temperature: f32,
-    pub duration: u8,
+    pub duration: i64,
     pub rate: Option<RateData>,
 }
 #[derive(Deserialize, Debug, Clone)]
 pub struct RateData {
     value: u8,
-    duration: u8,
+    duration: i64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -57,8 +56,7 @@ impl TryFrom<&async_nats::jetstream::Message> for Event {
         let utf8_str = std::str::from_utf8(value.payload.as_ref())
             .map_err(|e| anyhow::anyhow!("UTF-8 conversion error: {}", e))?;
 
-        serde_json::from_str(utf8_str)
-            .map_err(|e| anyhow::anyhow!("JSON deserialization error: {}, {}", e, utf8_str))
+        serde_json::from_str(utf8_str).map_err(|e| anyhow::anyhow!("JSON deserialization error: {}, {}", e, utf8_str))
     }
 }
 impl From<&FermentationStepData> for FermentationStep {
@@ -66,10 +64,10 @@ impl From<&FermentationStepData> for FermentationStep {
         FermentationStep {
             position: value.position,
             target_temperature: value.target_temperature,
-            duration: value.duration,
+            duration: Duration::hours(value.duration),
             rate: value.rate.as_ref().map(|r| Rate {
                 value: r.value,
-                duration: r.duration,
+                duration: Duration::hours(r.duration),
             }),
         }
     }
@@ -141,7 +139,7 @@ impl TryFrom<EventData> for ScheduleMessageData {
                 hardwares,
                 steps,
             } => ScheduleMessageData {
-                session_id: session_id,
+                session_id,
                 hardwares: hardwares
                     .into_iter()
                     .map(Hardware::try_from)
@@ -157,10 +155,8 @@ impl TryFrom<EventData> for ScheduleMessageData {
 #[cfg(test)]
 mod tests {
 
-    use internal::domain::message::{
-        FermentationStep, Hardware, HardwareType, Message, MessageType,
-    };
-    use time::OffsetDateTime;
+    use internal::domain::message::{FermentationStep, Hardware, HardwareType, Message, MessageType};
+    use time::{Duration, OffsetDateTime};
     use uuid::Uuid;
 
     use crate::inbound::model::event::{FermentationStepData, HardwareData, RateData};
@@ -202,7 +198,7 @@ mod tests {
                 assert_eq!(schedule_message_data.steps.len(), 1);
                 let step = schedule_message_data.steps.first().unwrap();
                 assert_eq!(step.rate, None);
-                assert_eq!(step.duration, 1);
+                assert_eq!(step.duration, Duration::hours(1));
                 assert_eq!(step.target_temperature, 21.0);
                 assert_eq!(step.position, 0);
             }
@@ -255,30 +251,21 @@ mod tests {
                 position: 1,
                 target_temperature: 22.0,
                 duration: 2,
-                rate: Some(RateData {
-                    value: 1,
-                    duration: 1,
-                }),
+                rate: Some(RateData { value: 1, duration: 1 }),
             },
         ];
 
-        step_data
-            .iter()
-            .flat_map(FermentationStep::try_from)
-            .for_each(|step| {
-                assert_eq!(step.duration, step_data[step.position].duration);
-                assert_eq!(
-                    step.target_temperature,
-                    step_data[step.position].target_temperature
-                );
-                match (&step.rate, &step_data[step.position].rate) {
-                    (None, None) => {} // Pass
-                    (Some(r), Some(rd)) => {
-                        assert_eq!(r.value, rd.value);
-                        assert_eq!(r.duration, rd.duration);
-                    }
-                    _ => panic!("Mismatched Rate options value"),
+        step_data.iter().flat_map(FermentationStep::try_from).for_each(|step| {
+            assert_eq!(step.duration, Duration::hours(step_data[step.position].duration as i64));
+            assert_eq!(step.target_temperature, step_data[step.position].target_temperature);
+            match (&step.rate, &step_data[step.position].rate) {
+                (None, None) => {} // Pass
+                (Some(r), Some(rd)) => {
+                    assert_eq!(r.value, rd.value);
+                    assert_eq!(r.duration, Duration::hours(rd.duration));
                 }
-            });
+                _ => panic!("Mismatched Rate options value"),
+            }
+        });
     }
 }

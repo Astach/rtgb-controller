@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS "session" (
     uuid UUID UNIQUE NOT NULL,
     cooling_id VARCHAR(250) NOT NULL,
     heating_id VARCHAR(250) NOT NULL,
+    active_hardware_type  VARCHAR(250),
     created_at TIMESTAMP(6) NOT NULL DEFAULT now(),
     updated_at TIMESTAMP(6) NOT NULL DEFAULT now()
 );

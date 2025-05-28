@@ -939,6 +939,7 @@ dependencies = [
  "mockall",
  "thiserror 2.0.9",
  "time",
+ "tokio",
  "uuid",
 ]
 
