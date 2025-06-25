@@ -9,7 +9,8 @@ name = "rtgb-controller"
 path = "src/main.rs"
 
 [dependencies]
-async-nats = "0.40"
+async-nats = "0.41"
+bigdecimal = "0.4"
 internal = { path = "../internal" }
 rustls = "0.23"
 rustls-pemfile = "2.2"
@@ -36,5 +37,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-mockall_double.workspace = true
 rcgen = "0.13"

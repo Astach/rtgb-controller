@@ -105,12 +105,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-nats",
+ "bigdecimal",
  "env_logger",
  "futures",
  "internal",
  "log",
  "mockall",
- "mockall_double",
  "rcgen",
  "rustls",
  "rustls-pemfile",
@@ -125,9 +125,9 @@ dependencies = [
 
 [[package]]
 name = "async-nats"
-version = "0.40.0"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e23419d455dc57d3ae60a2f4278cf561fc74fe866e548e14d2b0ad3e1b8ca0b2"
+checksum = "2cf0ae68ffe9ef362127a2223b42f57104edb20a50429f8c6e058912212884f7"
 dependencies = [
  "base64",
  "bytes",
@@ -932,12 +932,11 @@ name = "internal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "env_logger",
- "futures",
  "log",
  "mockall",
  "thiserror 2.0.9",
  "time",
+ "tokio",
  "uuid",
 ]
 
@@ -1109,18 +1108,6 @@ name = "mockall_derive"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ca3004c2efe9011bd4e461bd8256445052b9615405b4f7ea43fc8ca5c20898"
-dependencies = [
- "cfg-if",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "mockall_double"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1ca96e5ac35256ae3e13536edd39b172b88f41615e1d7b653c8ad24524113e8"
 dependencies = [
  "cfg-if",
  "proc-macro2",

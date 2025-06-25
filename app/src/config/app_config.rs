@@ -20,10 +20,8 @@ impl AppConfig {
     pub fn load(file_name: &str) -> anyhow::Result<AppConfig> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let file_path = Path::new(project_root).join(file_name);
-        let content = fs::read_to_string(file_path)
-            .map_err(|err| anyhow!("Could not read config file: {:?}", err))?;
-        Ok(toml::from_str(&content)
-            .map_err(|err| anyhow!("Could not parse TOML config: {:?}", err))?)
+        let content = fs::read_to_string(file_path).map_err(|err| anyhow!("Could not read config file: {:?}", err))?;
+        toml::from_str(&content).map_err(|err| anyhow!("Could not parse TOML config: {:?}", err))
     }
 }
 

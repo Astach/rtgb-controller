@@ -1,0 +1,15 @@
+experimental = ["setup-scripts"]
+
+
+[scripts.setup.set-test-env]
+command = { command-line = ".config/set-test-env.sh", relative-to = "workspace-root" }
+
+[profile.ci]
+fail-fast = false
+
+[profile.test]
+fail-fast = false
+
+[[profile.test.scripts]]
+filter = 'all()'       #rdeps(sqlx)
+setup = 'set-test-env'

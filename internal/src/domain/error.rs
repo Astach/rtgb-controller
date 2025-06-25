@@ -1,9 +1,7 @@
-use std::error::Error;
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum MessageServiceError {
+pub enum CommandSchedulerServiceError {
     #[error("Unable to find: {0}")]
     NotFound(String),
     #[error("There must be at least a one fermentation step")]
@@ -18,4 +16,16 @@ pub enum MessageServiceError {
     InvalidPosition(usize),
     #[error("Something wrong happened {0}")]
     TechnicalError(String),
+    #[error("Unable to convert {0} to {1}")]
+    ConversionError(&'static str, &'static str),
+}
+
+#[derive(Error, Debug)]
+pub enum CommandExecutorServiceError {
+    #[error("Unable to find: {0}")]
+    NotFound(String),
+    #[error("Something wrong happened {0}")]
+    TechnicalError(String),
+    #[error("Only Planned command can be executed")]
+    StatusError,
 }

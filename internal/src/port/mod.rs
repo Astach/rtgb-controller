@@ -1,1 +1,2 @@
-pub mod messaging;
+pub mod command;
+pub mod publisher;

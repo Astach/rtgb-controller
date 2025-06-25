@@ -1,4 +1,4 @@
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -12,6 +12,13 @@ pub struct Message {
 #[derive(Debug)]
 pub enum MessageType {
     Schedule(ScheduleMessageData),
+    Tracking(TrackingMessageData),
+}
+
+#[derive(Debug, Default)]
+pub struct TrackingMessageData {
+    pub session_id: Uuid,
+    pub temperature: f32,
 }
 
 #[derive(Debug)]
@@ -22,9 +29,7 @@ pub struct ScheduleMessageData {
 }
 impl ScheduleMessageData {
     pub fn get_hardware_of_type(&self, hardware_type: &HardwareType) -> Option<&Hardware> {
-        self.hardwares
-            .iter()
-            .find(|h| &h.hardware_type == hardware_type)
+        self.hardwares.iter().find(|h| &h.hardware_type == hardware_type)
     }
 }
 
@@ -32,20 +37,28 @@ impl ScheduleMessageData {
 pub struct FermentationStep {
     pub position: usize,
     pub target_temperature: f32,
-    pub duration: u8,
+    pub duration: Duration,
     pub rate: Option<Rate>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Rate {
     pub value: u8,
-    pub duration: u8,
+    pub duration: Duration,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HardwareType {
     Cooling,
     Heating,
+}
+impl HardwareType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            HardwareType::Cooling => "Cooling",
+            HardwareType::Heating => "Heating",
+        }
+    }
 }
 #[derive(Debug, Clone)]
 pub struct Hardware {
