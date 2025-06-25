@@ -37,5 +37,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-mockall_double.workspace = true
 rcgen = "0.13"
