@@ -146,8 +146,9 @@ export NATS_TLS_VERIFY=true
 
 3. Install `nats` cli and export the following variables
 4. Launch the nats server using `docker compose up`
-5. Send a message `nats publish <subject> <message>`
-6. Subscribe to subject `nats subscribe <subject>`
+5. Create a nats context `nats context add myuser --creds ~/.local/share/nats/nsc/keys/creds/MyOperator/MyAccount/MyUser.creds`
+6. Send a message `nats publish <subject> <message>`
+7. Subscribe to subject `nats subscribe <subject>`
 
 ### Postgres
 
@@ -205,8 +206,8 @@ psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-f
 - Unable to parse the json received via Nats subject: make sure to wrap your payload with single quote (`'`) not doubles (`"`)
   e.g. :
 
-```nushell
-nats publish fermentation.schedule.command ('{
+```zsh
+nats publish fermentation.schedule.command '{
      "id": "550e8400-e29b-41d4-a716-446655440000",
      "sent_at": "2024-12-15T12:34:56Z",
      "version": 1,
@@ -249,7 +250,7 @@ nats publish fermentation.schedule.command ('{
              }
          ]
      }
- }')
+ }'
 ```
 
 - Run unit tests:

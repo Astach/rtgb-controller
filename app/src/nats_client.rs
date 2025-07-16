@@ -23,6 +23,8 @@ impl NatsClient {
         let address = format!("tls://{}:{}", self.client_config.host, self.client_config.port);
         let options = ConnectOptions::new()
             .tls_client_config(NatsClient::client_configuration(&self.client_config.cert).unwrap())
+            .credentials_file(&self.client_config.creds_path)
+            .await?
             .require_tls(true)
             .name("rtgb-controller");
 
