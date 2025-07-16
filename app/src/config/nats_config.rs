@@ -27,4 +27,5 @@ pub struct ClientConfig {
     pub host: String,
     pub port: u16,
     pub cert: CertConfig,
+    pub creds_path: String,
 }

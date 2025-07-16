@@ -1,6 +1,7 @@
 [nats.client]
 host = "127.0.0.1"
 port = 4222
+creds_path = "/home/antoine/.local/share/nats/nsc/keys/creds/operator/account/user.creds"
 
 [nats.client.cert]
 absolute_folder_path = "/home/certs"

@@ -20,3 +20,8 @@ certs/*
 .envrc
 !*.template
 config.toml
+### Nats conf ###
+.creds
+.jwt
+server.conf
+
