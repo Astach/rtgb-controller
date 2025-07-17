@@ -129,7 +129,7 @@ export NATS_TLS_VERIFY=true
 
 3. Install `nats` along with `nsc` cli and export the following variables
 4. Create your [server.conf](./docker/nats/server.template.conf), check out the links in the template.
-5. Create a nats context `nats context add myuser --creds ~/.local/share/nats/nsc/keys/creds/MyOperator/MyAccount/MyUser.creds`, you can edit it to add the variables from step 2. if you prefer.
+5. Create a nats context `nats context add myuser --creds ~/.local/share/nats/nsc/keys/creds/MyOperator/MyAccount/MyUser.creds`, you can edit it to add the variables from step 2 if you prefer. Don't forget to select the context `nats context select` afterwards.
 6. Launch the nats server using `docker compose up`
 7. Send a message `nats publish <subject> <message>`
 8. Subscribe to subject `nats subscribe <subject>`

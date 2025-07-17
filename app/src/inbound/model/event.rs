@@ -15,6 +15,7 @@ pub struct Event {
     pub version: u32,
     #[serde(rename = "type")]
     pub event_type: String,
+    #[serde(flatten)]
     pub data: EventData,
 }
 #[derive(Deserialize, Debug, Clone)]
