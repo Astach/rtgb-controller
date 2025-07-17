@@ -195,7 +195,7 @@ nats publish fermentation.schedule.command '{
              {
                  "position": 0,
                  "target_temperature": 20,
-                 "duration": 96,
+                 "duration": 96
              },
              {
                  "position": 1,
@@ -204,16 +204,16 @@ nats publish fermentation.schedule.command '{
                      "value": 2,
                      "duration": 1
                  },
-                 "duration": 72,
+                 "duration": 72
              },
              {
-                 "position": 3,
+                 "position": 2,
                  "target_temperature": 2,
                  "rate": {
                      "value": 4,
                      "duration": 6
                  },
-                 "duration": 48,
+                 "duration": 48
              }
          ]
      }

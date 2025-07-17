@@ -121,8 +121,8 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
                         let prev_step = data
                             .steps
                             .iter()
-                            // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen as the first step can't have rate but this is handled just in case and must be tested .
                             .filter(|s| s.position > 0)
+                            // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen as the first step can't have rate but this must be handled just in case and must be tested .
                             .find(|s| s.position == step.position - 1)
                             .ok_or(CommandSchedulerServiceError::InvalidPosition(step.position - 1))?;
 
