@@ -160,3 +160,39 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
         CommandSchedulerService { repository }
     }
 }
+#[cfg(test)]
+mod test {
+    #[test]
+    fn should_invalidate_on_empty_step() {
+        todo!();
+    }
+    #[test]
+    fn should_invalidate_on_rate_on_first_step() {
+        todo!();
+    }
+    #[test]
+    fn should_invalidate_on_rate_misconfiguration() {
+        todo!();
+    }
+    #[test]
+    fn should_validate_steps() {
+        todo!();
+    }
+
+    #[test]
+    fn should_correctly_calculate_number_of_command() {
+        todo!();
+    }
+    #[test]
+    fn should_correctly_build_commands_without_rate() {
+        todo!();
+    }
+    #[test]
+    fn should_correctly_build_commands_with_rate_only() {
+        todo!();
+    }
+    #[test]
+    fn should_correctly_build_mixed_commands() {
+        todo!();
+    }
+}
