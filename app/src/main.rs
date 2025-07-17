@@ -19,7 +19,7 @@ use internal::{
     port::command::CommandSchedulerDriverPort,
     service::{command_executor_service::CommandExecutorService, command_scheduler_service::CommandSchedulerService},
 };
-use log::{debug, error};
+use log::{debug, error, warn};
 use nats_client::NatsClient;
 use outbound::{nats_publisher::NatsPublisher, postgres::CommandRepository};
 use sqlx::postgres::PgPoolOptions;
@@ -54,37 +54,50 @@ async fn main() -> Result<(), anyhow::Error> {
     let executor_service = CommandExecutorService::new(cmd_repository.clone(), nats_publisher);
 
     loop {
-        let mut messages = consumer.messages().await?;
-        while let Some(input) = messages.try_next().await? {
-            let message = Event::try_from(&input)
-                .and_then(Message::try_from)
-                .inspect_err(|e| error!("{e}"))?;
-
-            match message.message_type {
-                MessageType::Schedule(schedule_message_data) => scheduler_service
-                    .schedule(schedule_message_data)
-                    .await
-                    .inspect(|it| debug!("Command Processed, {:?} commmand(s) created", it))
-                    .inspect_err(|e| error!("{e}"))
-                    .map(|_| ())?,
-
-                MessageType::Tracking(tracking_message_data) => executor_service
-                    .process(tracking_message_data)
-                    .await
-                    .inspect(|_| debug!("Message Processed, commmand(s) executed/updated"))
-                    .inspect_err(|e| error!("{e}"))?,
+        let messages = consumer.messages().await;
+        match messages {
+            Err(e) => {
+                error!("Unable to consume stream {e}");
+                continue;
             }
-            // {
-            //        Ok(fut) => match fut.await {
-            //            Ok(x) => debug!("Message Processed, {:?} commmand(s) created", x),
-            //            Err(e) => error!("Unable to process event {:?}", e),
-            //        },
-            //        Err(e) => {
-            //            error!("Unable to convert event into a domain message {:?}", e)
-            //        }
-            //    }
+            Ok(mut stream) => {
+                while let Ok(maybe_msg) = stream.try_next().await {
+                    match maybe_msg {
+                        None => warn!("No message to process"),
+                        Some(nats_msg) => {
+                            let msg = Event::try_from(&nats_msg)
+                                .and_then(Message::try_from)
+                                .inspect_err(|e| error!("{e}"));
+                            if let Ok(msg) = msg {
+                                let processing_result = match msg.message_type {
+                                    MessageType::Schedule(schedule_message_data) => scheduler_service
+                                        .schedule(schedule_message_data)
+                                        .await
+                                        .inspect(|it| debug!("Command Processed, {:?} commmand(s) created", it))
+                                        .inspect_err(|e| error!("{e}"))
+                                        .map_err(|e| anyhow::anyhow!(e))
+                                        .map(|_| ()),
+                                    MessageType::Tracking(tracking_message_data) => executor_service
+                                        .process(tracking_message_data)
+                                        .await
+                                        .inspect(|_| debug!("Message Processed, commmand(s) executed/updated"))
+                                        .inspect_err(|e| error!("{e}"))
+                                        .map_err(|e| anyhow::anyhow!(e))
+                                        .map(|_| ()),
+                                };
+                                if let Err(e) = processing_result {
+                                    error!("Unable to process incoming events: {e}")
+                                };
+                            }
 
-            input.ack().await.map_err(|e| anyhow::anyhow!(e))?;
+                            match nats_msg.ack().await {
+                                Ok(_) => debug!("Nats message acknowledged"),
+                                Err(e) => error!("Unable to ack message: {e}"),
+                            };
+                        }
+                    }
+                }
+            }
         }
     }
 }

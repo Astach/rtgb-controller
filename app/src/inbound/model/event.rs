@@ -13,11 +13,11 @@ pub struct Event {
     #[serde(with = "time::serde::rfc3339")]
     pub sent_at: OffsetDateTime,
     pub version: u32,
-    #[serde(rename = "type")]
-    pub event_type: String,
+    #[serde(flatten)]
     pub data: EventData,
 }
 #[derive(Deserialize, Debug, Clone)]
+#[serde(tag = "type", content = "data")]
 pub enum EventData {
     Schedule {
         session_id: Uuid,
@@ -93,20 +93,19 @@ impl TryFrom<Event> for Message {
     type Error = anyhow::Error;
 
     fn try_from(value: Event) -> std::result::Result<Self, Self::Error> {
-        Ok(match value.event_type.as_str() {
-            "schedule" => Message {
+        Ok(match &value.data {
+            EventData::Schedule { .. } => Message {
                 id: value.id,
                 sent_at: value.sent_at,
                 version: value.version,
                 message_type: MessageType::Schedule(ScheduleMessageData::try_from(value.data)?),
             },
-            "tracking" => Message {
+            EventData::Tracking { .. } => Message {
                 id: value.id,
                 sent_at: value.sent_at,
                 version: value.version,
                 message_type: MessageType::Tracking(TrackingMessageData::try_from(value.data)?),
             },
-            _ => bail!("Event type {} is not supported", value.event_type),
         })
     }
 }
@@ -182,7 +181,6 @@ mod tests {
             id: Uuid::new_v4(),
             sent_at: OffsetDateTime::now_utc(),
             version: 1,
-            event_type: "schedule".to_string(),
             data: event_data,
         };
         let msg = Message::try_from(event.clone()).unwrap();
@@ -208,29 +206,6 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn should_be_err_on_invalid_event_type() {
-        let event_data = EventData::Schedule {
-            session_id: Uuid::new_v4(),
-            hardwares: vec![],
-            steps: vec![FermentationStepData {
-                position: 0,
-                target_temperature: 21.0,
-                duration: 1,
-                rate: None,
-            }],
-        };
-        let event = Event {
-            id: Uuid::new_v4(),
-            sent_at: OffsetDateTime::now_utc(),
-            version: 1,
-            event_type: "skedule".to_string(),
-            data: event_data,
-        };
-        Message::try_from(event).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
     fn should_be_err_on_invalid_hardware_type() {
         let hardware_data = HardwareData {
             id: "anId".to_string(),
@@ -240,7 +215,7 @@ mod tests {
     }
     #[test]
     fn should_map_event_step_to_fermentation_step() {
-        let step_data = vec![
+        let step_data = [
             FermentationStepData {
                 position: 0,
                 target_temperature: 21.0,
@@ -256,7 +231,7 @@ mod tests {
         ];
 
         step_data.iter().flat_map(FermentationStep::try_from).for_each(|step| {
-            assert_eq!(step.duration, Duration::hours(step_data[step.position].duration as i64));
+            assert_eq!(step.duration, Duration::hours(step_data[step.position].duration));
             assert_eq!(step.target_temperature, step_data[step.position].target_temperature);
             match (&step.rate, &step_data[step.position].rate) {
                 (None, None) => {} // Pass
