@@ -1,46 +1,29 @@
 # RTGB Controller
 
-RTGB Controller is responsible for scheduling command to controller an active fermentations
+RTGB Controller is responsible for scheduling command to control active fermentations
 
 ## Overview
 
 1. Receives an event from the RTGB API that includes the fermentation steps to send to a chamber
 2. Convert the event to the corresponding scheduling commands
 3. Store in a DB all the scheduling commands.
-4. Every 20 minutes checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
-5. Update the command as Sent
-6. Update the command as Acknowledged when the socket responds to the command (via MQTT)
-7. On every check, verify that if the target_temperature is reached, it has been held for the specified duration.
-8. Once the step is done, update the command to Executed.
+4. On event received by the hydrometer checks the DB, fire the command that needs to be sent to the hardware (send to MQTT broker)
+5. Update the command as Running
+6. On every check, verify that if the target_temperature is reached, it has been held for the specified duration.
+7. Once the step is done, update the command to Executed.
 
-### Command description
+### New Command description
 
-_METADATA_
-
-- ID <Command ID>
-- SentAt <Epoch of the command sending>
-- Version <Command Version>
-- Type <Command Type>
-
-  - StartFermentation: Start the fermentation at the given `Value` in degree Celcius. e.g. Start 22
-  - IncreaseTemperature: Increase the temperature of the given `Value` in degree Celcius. e.g. Increase 1.5
-  - DecreaseTemperature: Decrease the temperature of the given `Value` in degree Celcius. e.g. Decrease 1.5
-    _DATA_
-
-- Session : The session identifier associated with this command
-- Value: A temperature value, can represent a temperature in Celcius or an absolute delta
-- Target: The cooling or heating hardware identifier
-- Duration: Duration for which the target temperature must be held.
-- Date: When to fire the command
+- id: Command UUID
+- sent_at: Epoch of the command sending
+- version: Command Version
+- session_data: The session uuid and the step position
+- value: A temperature value, can represent a temperature in Celcius or an absolute delta
+- value_holding_duration: The time amount to wait before executing the next command once the target temperature has been reached
 - Status
   - Planned: The command will be sent
   - Running: The command is currently running
   - Executed: The command has been executed, we can move on to the next one.
-
-#### Examples
-
-- `StartFermentation 22 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Acknowledged`
-- `IncreaseTemperature 4 da0ef064-a093-4fad-9a06-120ddaa9e87c #12ADFC 1729579120 Planned`
 
 ## Start the project
 
@@ -144,15 +127,16 @@ export NATS_TLS_VERIFY=true
 
 **Important**: use absolute paths in your database url for certificates' path, you can use `${PWD}` e.g.: `${PWD}/certs/root.ca`.
 
-3. Install `nats` cli and export the following variables
-4. Launch the nats server using `docker compose up`
-5. Create a nats context `nats context add myuser --creds ~/.local/share/nats/nsc/keys/creds/MyOperator/MyAccount/MyUser.creds`
-6. Send a message `nats publish <subject> <message>`
-7. Subscribe to subject `nats subscribe <subject>`
+3. Install `nats` along with `nsc` cli and export the following variables
+4. Create your [server.conf](./docker/nats/server.template.conf), check out the links in the template.
+5. Create a nats context `nats context add myuser --creds ~/.local/share/nats/nsc/keys/creds/MyOperator/MyAccount/MyUser.creds`, you can edit it to add the variables from step 2. if you prefer.
+6. Launch the nats server using `docker compose up`
+7. Send a message `nats publish <subject> <message>`
+8. Subscribe to subject `nats subscribe <subject>`
 
 ### Postgres
 
-1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill the POSTGRES values
+1. Create or edit a `.env` file at `/docker/.env` by using `/docker/.env.template` and fill out the POSTGRES values
 2. Add/Edit the posgresql conf at `/docker/postgres/postgresql.conf`
 3. Add/Edit the hba conf at `/docker/postgres/pg_hba.conf`
 
@@ -170,29 +154,12 @@ export NATS_TLS_VERIFY=true
 
 ### Scheduling Command
 
-- The first command must be a `StartFermentation` command
-- There can be only one `StartFermentation`
 - After the last command is in Executed State, we stop the fermentation by sending a turn off to the heating and cooling device.
-
-The commands are sent over MQTT using MATTER protocol and NATS-MQTT-BRIDGE, this means the payload is sent using protobuf.
-
-- HEADER: Contains message metadata
-
-  - ID
-  - SentAt
-  - Version
-  - Type
-
-- PAYLOAD:
-  - ClusterID
-  - AttributesID
-  - Value
-  - Target
 
 ### Command firing rules
 
-- The `StartFermentation` is not instantly triggered as we don't know what is the current temperature of the fermentation chamber. Once the first value of the hydrometer is received, the `StartFermentation` command will be sent and increase or decrease the temperature to reach the targeted one.
-- Once a `StartFermentation` command has been `Acknowledged`, on the next event received from the hydrometer, check if the `target_temperature` is reached, if yes we can consider that the step has started for its given duration, so:
+- The first command is not instantly triggered as we don't know what is the current temperature of the fermentation chamber. Once the first value of the hydrometer is received, the command will be sent and increase or decrease the temperature to reach the desired temperature.
+- Once a command is has the status `Running`, on the next event received from the hydrometer, check if the `target_temperature` is reached, if yes we can consider that the step has started for its given duration.
 
 ## FAQ
 
