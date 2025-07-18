@@ -69,14 +69,14 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
         let delta = (previous_target_temp - next_target_temp).abs();
         (delta / rate).ceil() as i32
     }
-    fn build_command(session_id: Uuid, position: usize, target_temp: f32, duration: Duration) -> NewCommand {
+    fn build_command(session_id: Uuid, step_position: usize, target_temp: f32, duration: Duration) -> NewCommand {
         NewCommand {
             id: Uuid::new_v4(),
             sent_at: None,
             version: 1,
             session_data: SessionData {
                 id: session_id,
-                step_position: position as u8,
+                step_position: step_position as u8,
             },
             status: CommandStatus::Planned,
             value: target_temp,

@@ -28,7 +28,7 @@ pub trait CommandDrivenPort {
     fn update_active_hardware_type(
         &self, session_uuid: Uuid, active_hardware_type: Option<HardwareType>,
     ) -> impl Future<Output = anyhow::Result<()>> + Send;
-    fn fetch_commands(
+    fn fetch_commands_by_order(
         &self, session_id: Uuid, status: &CommandStatus, options: QueryOptions,
     ) -> impl Future<Output = Result<Vec<Command>, anyhow::Error>> + Send;
 
