@@ -137,15 +137,12 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorService<R, P> 
             self.publisher
                 .publish(action)
                 .await
-                .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {:?}", e)))?;
+                .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {e}")))?;
             self.repository
                 .update_active_hardware_type(tracking_message_data.session_id, Some(hardware_type))
                 .await
                 .map_err(|e| {
-                    CommandExecutorServiceError::TechnicalError(format!(
-                        "Unable to update active hardware type: {:?}",
-                        e
-                    ))
+                    CommandExecutorServiceError::TechnicalError(format!("Unable to update active hardware type: {e}"))
                 })?;
             self.repository
                 .update_status(planned_command.uuid, &status)
@@ -165,11 +162,11 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorService<R, P> 
         self.publisher
             .publish(HardwareAction::STOP(heating_hw_id))
             .await
-            .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {:?}", e)))?;
+            .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {e}")))?;
         self.publisher
             .publish(HardwareAction::STOP(cooling_hw_id))
             .await
-            .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {:?}", e)))?;
+            .map_err(|e| CommandExecutorServiceError::TechnicalError(format!("Unable to publish: {e}")))?;
         let status = CommandStatus::Executed {
             at: OffsetDateTime::now_utc(),
         };
@@ -177,7 +174,7 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorService<R, P> 
             .update_active_hardware_type(session_id, None)
             .await
             .map_err(|e| {
-                CommandExecutorServiceError::TechnicalError(format!("Unable to update active hardware type: {:?}", e))
+                CommandExecutorServiceError::TechnicalError(format!("Unable to update active hardware type: {e}"))
             })?;
         self.repository
             .update_status(cmd.uuid, &status)

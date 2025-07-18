@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::bail;
 use log::warn;
 use time::Duration;
 use uuid::Uuid;
@@ -53,47 +54,18 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
                 "Rate can't be defined for the first fermentation step".to_string(),
             ));
         }
-
-        //TODO must be tested
-        steps
-            .iter()
-            .filter(|x| x.rate.is_some())
-            .try_fold(true, |_, step| {
-                let previous_step = steps.iter().find(|s| s.position == step.position - 1);
-                let previous_step = match previous_step {
-                    Some(prev_step) => prev_step,
-                    None => return Err(CommandSchedulerServiceError::InvalidPosition(step.position - 1))
-                };
-            let rate_is_valid = self.validate_rate(previous_step, step)?;
-            if !rate_is_valid {
-                warn!( "Rate configuration for {:?} is not valid considering the previous step's target temperature of {:?}", step, previous_step.target_temperature);
-                return Err(CommandSchedulerServiceError::InvalidRateConfiguration(format!("{:?}",step)));
-            }
-            Ok(rate_is_valid)
-            })
-    }
-    fn validate_rate(
-        &self, previous_step: &FermentationStep, step: &FermentationStep,
-    ) -> Result<bool, CommandSchedulerServiceError> {
-        let rate_temp_value =
-            step.rate
-                .as_ref()
-                .map(|rate| i32::from(rate.value))
-                .ok_or(CommandSchedulerServiceError::NotFound(format!(
-                    "rate for step {:?}",
-                    step
-                )))?;
-        let number_of_cmds = Self::get_needed_commands_for_rate(
-            previous_step.target_temperature,
-            step.target_temperature,
-            rate_temp_value as f32,
-        );
-        let final_temp_delta = rate_temp_value * number_of_cmds;
-        let temp_delta_between_steps = (previous_step.target_temperature - step.target_temperature).abs() as i32;
-        Ok(final_temp_delta >= temp_delta_between_steps)
+        let are_positions_valid =
+            (0..steps.len()).all(|idx| steps.iter().filter(|step| step.position == idx).count() == 1);
+        if are_positions_valid {
+            Ok(true)
+        } else {
+            Err(CommandSchedulerServiceError::InvalidStepConfiguration(
+                "Steps's position do not match the number of steps".to_string(),
+            ))
+        }
     }
 
-    fn get_needed_commands_for_rate(previous_target_temp: f32, next_target_temp: f32, rate: f32) -> i32 {
+    fn calculate_required_amount_of_command(previous_target_temp: f32, next_target_temp: f32, rate: f32) -> i32 {
         let delta = (previous_target_temp - next_target_temp).abs();
         (delta / rate).ceil() as i32
     }
@@ -111,37 +83,51 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
             value_holding_duration: duration,
         }
     }
+
     fn build_commands(data: &ScheduleMessageData) -> Result<Vec<NewCommand>, CommandSchedulerServiceError> {
         Ok(data
             .steps
             .iter()
-            .flat_map(|step| -> Result<Vec<NewCommand>, CommandSchedulerServiceError> {
+            .map(|step| -> Result<Vec<NewCommand>, CommandSchedulerServiceError> {
                 match step.rate.as_ref() {
                     Some(rate) => {
-                        let prev_step = data
-                            .steps
-                            .iter()
-                            .filter(|s| s.position > 0)
-                            // FIXME if step.position is 0 it will panic as u8 cannot be -1, this should never happen as the first step can't have rate but this must be handled just in case and must be tested .
-                            .find(|s| s.position == step.position - 1)
-                            .ok_or(CommandSchedulerServiceError::InvalidPosition(step.position - 1))?;
+                        if step.position > 0 {
+                            let prev_step = data.steps.iter().find(|s| s.position == step.position - 1).ok_or(
+                                CommandSchedulerServiceError::InvalidPosition(step.position - 1, "doesn't exist"),
+                            )?;
 
-                        let number_of_commands = Self::get_needed_commands_for_rate(
-                            prev_step.target_temperature,
-                            step.target_temperature,
-                            f32::from(rate.value),
-                        );
-                        Ok((0..number_of_commands)
-                            .map(|r| {
-                                let delta = (r + 1) as f32 * rate.value as f32;
-                                let target_temp = if prev_step.target_temperature > step.target_temperature {
-                                    prev_step.target_temperature - delta
-                                } else {
-                                    prev_step.target_temperature + delta
-                                };
-                                Self::build_command(data.session_id, step.position, target_temp, rate.duration)
-                            })
-                            .collect())
+                            let number_of_commands = Self::calculate_required_amount_of_command(
+                                prev_step.target_temperature,
+                                step.target_temperature,
+                                f32::from(rate.value),
+                            );
+                            Ok((0..number_of_commands)
+                                .map(|r| {
+                                    let delta = (r + 1) as f32 * rate.value as f32;
+                                    let target_temp = if prev_step.target_temperature > step.target_temperature {
+                                        let temp = prev_step.target_temperature - delta;
+                                        if temp < step.target_temperature {
+                                            step.target_temperature
+                                        } else {
+                                            temp
+                                        }
+                                    } else {
+                                        let temp = prev_step.target_temperature + delta;
+                                        if temp > step.target_temperature {
+                                            step.target_temperature
+                                        } else {
+                                            temp
+                                        }
+                                    };
+                                    Self::build_command(data.session_id, step.position, target_temp, rate.duration)
+                                })
+                                .collect())
+                        } else {
+                            Err(CommandSchedulerServiceError::InvalidPosition(
+                                step.position,
+                                "cannot hold a rate",
+                            ))?
+                        }
                     }
                     None => Ok(vec![Self::build_command(
                         data.session_id,
@@ -151,8 +137,8 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
                     )]),
                 }
             })
-            .flatten()
-            .collect())
+            .collect::<Result<Vec<_>, _>>() // This collects Result<Vec<Vec<NewCommand>>, Error>, so we keep errors (flat_map only yields Ok values)
+            .map(|vec_of_vecs| vec_of_vecs.into_iter().flatten().collect()))? // Flatten the Vec<Vec<NewCommand>>
     }
 }
 impl<R: CommandDrivenPort> CommandSchedulerService<R> {
@@ -162,37 +148,250 @@ impl<R: CommandDrivenPort> CommandSchedulerService<R> {
 }
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
+    use time::Duration;
+
+    use crate::{
+        domain::{
+            error::CommandSchedulerServiceError,
+            message::{FermentationStep, Hardware, HardwareType, Rate, ScheduleMessageData},
+        },
+        port::command::MockCommandDrivenPort,
+        service::command_scheduler_service::CommandSchedulerService,
+    };
+
     #[test]
-    fn should_invalidate_on_empty_step() {
-        todo!();
+    fn should_not_validate_on_empty_step() {
+        let repository = MockCommandDrivenPort::new();
+        let service = CommandSchedulerService::new(Arc::new(repository));
+        let err = service.validate(&[]).unwrap_err();
+        assert_eq!(err, CommandSchedulerServiceError::NoFermentationStep);
+    }
+
+    #[test]
+    fn should_not_validate_on_wrong_position() {
+        let repository = MockCommandDrivenPort::new();
+        let service = CommandSchedulerService::new(Arc::new(repository));
+        let step_1 = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(1),
+            rate: None,
+        };
+        let step_2 = FermentationStep {
+            position: 3,
+            target_temperature: 20.0,
+            duration: Duration::hours(1),
+            rate: Some(Rate {
+                value: 1,
+                duration: Duration::hours(1),
+            }),
+        };
+        let err = service.validate(&[step_1, step_2]).unwrap_err();
+        assert!(matches!(
+            err,
+            CommandSchedulerServiceError::InvalidStepConfiguration(..)
+        ));
     }
     #[test]
-    fn should_invalidate_on_rate_on_first_step() {
-        todo!();
+    fn should_not_validate_when_rate_on_first_step() {
+        let repository = MockCommandDrivenPort::new();
+        let service = CommandSchedulerService::new(Arc::new(repository));
+        let step = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(1),
+            rate: Some(Rate {
+                value: 1,
+                duration: Duration::hours(1),
+            }),
+        };
+        let steps = [step];
+        let err = service.validate(&steps).unwrap_err();
+        assert!(matches!(
+            err,
+            CommandSchedulerServiceError::InvalidStepConfiguration(..)
+        ));
     }
-    #[test]
-    fn should_invalidate_on_rate_misconfiguration() {
-        todo!();
-    }
+
     #[test]
     fn should_validate_steps() {
-        todo!();
+        let repository = MockCommandDrivenPort::new();
+        let service = CommandSchedulerService::new(Arc::new(repository));
+        let step_1 = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(1),
+            rate: None,
+        };
+        let step_2 = FermentationStep {
+            position: 1,
+            target_temperature: 20.0,
+            duration: Duration::hours(1),
+            rate: Some(Rate {
+                value: 1,
+                duration: Duration::hours(1),
+            }),
+        };
+        service.validate(&[step_2, step_1]).unwrap();
     }
 
     #[test]
     fn should_correctly_calculate_number_of_command() {
-        todo!();
+        let previous_target_temp = 20.4;
+        let next_target_temp = 3.2;
+        let rate = 2.4;
+        let amount = CommandSchedulerService::<MockCommandDrivenPort>::calculate_required_amount_of_command(
+            previous_target_temp,
+            next_target_temp,
+            rate,
+        );
+        assert_eq!(amount, 8);
+    }
+    #[test]
+    fn should_fail_building_command_if_rate_at_pos_0() {
+        let step_1 = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(96),
+            rate: Some(Rate {
+                value: 2,
+                duration: Duration::hours(1),
+            }),
+        };
+        let data = ScheduleMessageData {
+            session_id: uuid::Uuid::new_v4(),
+            hardwares: vec![
+                Hardware {
+                    hardware_type: HardwareType::Cooling,
+                    id: "cool".into(),
+                },
+                Hardware {
+                    hardware_type: HardwareType::Heating,
+                    id: "heat".into(),
+                },
+            ],
+            steps: vec![step_1],
+        };
+        let err = CommandSchedulerService::<MockCommandDrivenPort>::build_commands(&data).unwrap_err();
+        assert!(matches!(err, CommandSchedulerServiceError::InvalidPosition(..)))
     }
     #[test]
     fn should_correctly_build_commands_without_rate() {
-        todo!();
+        let step_1 = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(96),
+            rate: None,
+        };
+        let step_2 = FermentationStep {
+            position: 1,
+            target_temperature: 24.0,
+            duration: Duration::hours(72),
+            rate: None,
+        };
+        let step_3 = FermentationStep {
+            position: 2,
+            target_temperature: 2.0,
+            duration: Duration::hours(48),
+            rate: None,
+        };
+        let data = ScheduleMessageData {
+            session_id: uuid::Uuid::new_v4(),
+            hardwares: vec![
+                Hardware {
+                    hardware_type: HardwareType::Cooling,
+                    id: "cool".into(),
+                },
+                Hardware {
+                    hardware_type: HardwareType::Heating,
+                    id: "heat".into(),
+                },
+            ],
+            steps: vec![step_1, step_2, step_3],
+        };
+        let new_commands = CommandSchedulerService::<MockCommandDrivenPort>::build_commands(&data).unwrap();
+        assert_eq!(new_commands.len(), 3);
+        let first = new_commands.first().unwrap();
+        let second = new_commands.get(1).unwrap();
+        let third = new_commands.get(2).unwrap();
+        assert_eq!(first.value, 20.0);
+        assert_eq!(first.session_data.step_position, 0);
+        assert_eq!(second.value, 24.0);
+        assert_eq!(second.session_data.step_position, 1);
+        assert_eq!(third.value, 2.0);
+        assert_eq!(third.session_data.step_position, 2);
     }
-    #[test]
-    fn should_correctly_build_commands_with_rate_only() {
-        todo!();
-    }
+
     #[test]
     fn should_correctly_build_mixed_commands() {
-        todo!();
+        let step_1 = FermentationStep {
+            position: 0,
+            target_temperature: 20.0,
+            duration: Duration::hours(96),
+            rate: None,
+        };
+        let step_2 = FermentationStep {
+            position: 1,
+            target_temperature: 24.0,
+            duration: Duration::hours(72),
+            rate: Some(Rate {
+                value: 2,
+                duration: Duration::hours(1),
+            }),
+        };
+        let step_3 = FermentationStep {
+            position: 2,
+            target_temperature: 2.0,
+            duration: Duration::hours(48),
+            rate: Some(Rate {
+                value: 4,
+                duration: Duration::hours(6),
+            }),
+        };
+        let data = ScheduleMessageData {
+            session_id: uuid::Uuid::new_v4(),
+            hardwares: vec![
+                Hardware {
+                    hardware_type: HardwareType::Cooling,
+                    id: "cool".into(),
+                },
+                Hardware {
+                    hardware_type: HardwareType::Heating,
+                    id: "heat".into(),
+                },
+            ],
+            steps: vec![step_1, step_2, step_3],
+        };
+        let new_commands = CommandSchedulerService::<MockCommandDrivenPort>::build_commands(&data).unwrap();
+        let first = new_commands.first().unwrap();
+        let second = new_commands.get(1).unwrap();
+        let third = new_commands.get(2).unwrap();
+        let fourth = new_commands.get(3).unwrap();
+        let fifth = new_commands.get(4).unwrap();
+        let sixth = new_commands.get(5).unwrap();
+        let seventh = new_commands.get(6).unwrap();
+        let eighth = new_commands.get(7).unwrap();
+        let ninth = new_commands.last().unwrap();
+        assert_eq!(new_commands.len(), 9);
+        assert_eq!(first.value, 20.0);
+        assert_eq!(first.session_data.step_position, 0);
+        assert_eq!(second.value, 22.0);
+        assert_eq!(second.session_data.step_position, 1);
+        assert_eq!(third.value, 24.0);
+        assert_eq!(third.session_data.step_position, 1);
+        assert_eq!(fourth.value, 20.0);
+        assert_eq!(fourth.session_data.step_position, 2);
+        assert_eq!(fifth.value, 16.0);
+        assert_eq!(fifth.session_data.step_position, 2);
+        assert_eq!(sixth.value, 12.0);
+        assert_eq!(sixth.session_data.step_position, 2);
+        assert_eq!(seventh.value, 8.0);
+        assert_eq!(seventh.session_data.step_position, 2);
+        assert_eq!(eighth.value, 4.0);
+        assert_eq!(eighth.session_data.step_position, 2);
+        assert_eq!(ninth.value, 2.0); //target_temperature is the limit
+        assert_eq!(ninth.session_data.step_position, 2);
     }
 }

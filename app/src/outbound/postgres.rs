@@ -86,7 +86,7 @@ impl CommandDrivenPort for CommandRepository {
     async fn fetch_commands(
         &self, session_uuid: Uuid, status: &CommandStatus, options: QueryOptions,
     ) -> anyhow::Result<Vec<Command>> {
-        let limit = options.limit.map_or("".to_string(), |n| format!("LIMIT {}", n));
+        let limit = options.limit.map_or("".to_string(), |n| format!("LIMIT {n}"));
         let sql_query = format!(
             r#"SELECT 
                 {command_table}.uuid,
@@ -104,6 +104,9 @@ impl CommandDrivenPort for CommandRepository {
                ORDER BY 
                 {command_table}.updated_at {order}
                "#,
+            //TODO this is a brittle way to find the next
+            //command, command record should instead have a "position" field, to know when to
+            //trigger it.
             command_table = self.command_table,
             session_table = self.session_table,
             limit = limit,

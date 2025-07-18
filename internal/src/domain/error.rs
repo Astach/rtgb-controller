@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum CommandSchedulerServiceError {
     #[error("Unable to find: {0}")]
     NotFound(String),
@@ -12,8 +12,8 @@ pub enum CommandSchedulerServiceError {
         "Rate for step {0} is misconfigured, the final temperature after its execution would not match the whished targeted temperature"
     )]
     InvalidRateConfiguration(String),
-    #[error("Invalid step position: {0} does not exist")]
-    InvalidPosition(usize),
+    #[error("Invalid step position: {0} {1}")]
+    InvalidPosition(usize, &'static str),
     #[error("Something wrong happened {0}")]
     TechnicalError(String),
     #[error("Unable to convert {0} to {1}")]

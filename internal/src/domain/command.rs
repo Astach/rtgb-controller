@@ -4,7 +4,7 @@ use time::Duration;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct NewCommand {
     pub id: Uuid,
     pub sent_at: Option<OffsetDateTime>,
@@ -60,7 +60,7 @@ impl CommandStatus {
         }
     }
 }
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SessionData {
     pub id: Uuid,
     pub step_position: u8,
