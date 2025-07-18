@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::info;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -54,7 +55,7 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorDriverPort for
                     self.stop_all(&cmd, tracking_message_data.session_id).await?;
                     self.execute_next_command(tracking_message_data).await?;
                 } else {
-                    //TODO log "temp reached for cmd X but holding duration isn't matched yet"
+                    info!("target temperature has been reached for cmd {cmd:?} but holding duration isn't matched yet");
                 }
             }
         }
@@ -69,9 +70,9 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorService<R, P> 
     async fn fetch_command(
         &self, session_id: Uuid, status: &CommandStatus,
     ) -> Result<Vec<Command>, CommandExecutorServiceError> {
-        let options = QueryOptions::new(Some(1), Sorting::DESC);
+        let options = QueryOptions::new(Some(1), Sorting::ASC);
         self.repository
-            .fetch_commands(session_id, status, options)
+            .fetch_commands_by_order(session_id, status, options)
             .await
             .map_err(|err| CommandExecutorServiceError::TechnicalError(err.root_cause().to_string()))
     }
@@ -114,7 +115,10 @@ impl<R: CommandDrivenPort, P: PublisherDrivenPort> CommandExecutorService<R, P> 
             .fetch_command(tracking_message_data.session_id, &CommandStatus::Planned)
             .await?;
         if planned_cmds.is_empty() {
-            //TODO log "No more planned command to execute, profile processing is over"
+            info!(
+                "No more planned command to execute for session {:?}, profile execution is over.",
+                tracking_message_data.session_id
+            );
             Ok(())
         } else {
             let planned_command = planned_cmds.first().ok_or(CommandExecutorServiceError::TechnicalError(
@@ -263,7 +267,7 @@ mod test {
         repository.expect_update_value_reached_at().never();
         repository.expect_update_status().never();
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .return_once(|_, _, _| Box::pin(ready(Ok(vec![]))));
 
         publisher.expect_publish().never();
@@ -279,7 +283,7 @@ mod test {
             ..Default::default()
         };
 
-        repository.expect_fetch_commands().return_once(|_, _, _| {
+        repository.expect_fetch_commands_by_order().return_once(|_, _, _| {
             Box::pin(ready(Ok(vec![Command {
                 temperature_data: CommandTemperatureData {
                     value: 20.0,
@@ -331,7 +335,7 @@ mod test {
             ..Default::default()
         };
 
-        repository.expect_fetch_commands().return_once(|_, _, _| {
+        repository.expect_fetch_commands_by_order().return_once(|_, _, _| {
             Box::pin(ready(Ok(vec![Command {
                 temperature_data: CommandTemperatureData {
                     value: 20.0,
@@ -431,7 +435,7 @@ mod test {
         let publisher = MockPublisherDrivenPort::new();
         let tracking_data = TrackingMessageData::default();
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)
@@ -444,7 +448,7 @@ mod test {
 
         //Called in execute_next_command
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id && discriminant(status) == discriminant(&CommandStatus::Planned)
             })
@@ -463,7 +467,7 @@ mod test {
             ..Default::default()
         };
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)
@@ -514,7 +518,7 @@ mod test {
             .returning(|_, _| Box::pin(ready(Ok(Command::default())))); //stop all //stop all 
         //Called in execute_next_command
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id && discriminant(status) == discriminant(&CommandStatus::Planned)
             })
@@ -533,7 +537,7 @@ mod test {
             ..Default::default()
         };
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)
@@ -584,7 +588,7 @@ mod test {
             .returning(|_, _| Box::pin(ready(Ok(Command::default())))); //stop all //stop all 
         //Called in execute_next_command
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id && discriminant(status) == discriminant(&CommandStatus::Planned)
             })
@@ -603,7 +607,7 @@ mod test {
             ..Default::default()
         };
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)
@@ -641,7 +645,7 @@ mod test {
             ..Default::default()
         };
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)
@@ -675,7 +679,7 @@ mod test {
             ..Default::default()
         };
         repository
-            .expect_fetch_commands()
+            .expect_fetch_commands_by_order()
             .withf(move |&session_id, status, _| {
                 session_id == tracking_data.session_id
                     && discriminant(status)

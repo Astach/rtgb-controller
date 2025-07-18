@@ -27,6 +27,7 @@ psql -v ON_ERROR_STOP=1 <<-EOSQL
 	        value NUMERIC(3,1) NOT NULL,
 	        value_reached_at TIMESTAMP(6),
 	        value_holding_duration INTEGER NOT NULL, -- for how long to maintain the temperature after the value (target temp ) as been reached.
+	        execution_order INTEGER NOT NULL,
 	        created_at TIMESTAMP(6) NOT NULL DEFAULT now(),
 	        updated_at TIMESTAMP(6) NOT NULL DEFAULT now(),
 	        session_id INTEGER NOT NULL,

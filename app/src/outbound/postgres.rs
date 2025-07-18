@@ -54,12 +54,13 @@ impl CommandDrivenPort for CommandRepository {
             .map(|c| NewCommandRecord::from_command(c, session_record_id))
             .collect::<anyhow::Result<Vec<NewCommandRecord>>>()?;
         let sql_query = format!(
-            "INSERT INTO {:?} (uuid, fermentation_step_id, status, status_date, value, value_reached_at,value_holding_duration, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            "INSERT INTO {:?} (uuid, fermentation_step_id, status, status_date, value, value_reached_at,value_holding_duration, session_id, execution_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
             self.command_table
         );
         let futures: Vec<_> = records
             .iter()
-            .map(|rec| {
+            .enumerate()
+            .map(|(order, rec)| {
                 query(sql_query.as_str())
                     .bind(rec.command_id)
                     .bind(rec.fermentation_step_id)
@@ -69,6 +70,7 @@ impl CommandDrivenPort for CommandRepository {
                     .bind(None as Option<PrimitiveDateTime>)
                     .bind(rec.value_holding_duration)
                     .bind(rec.session_id)
+                    .bind(order as i32)
                     .execute(&self.pool)
             })
             .collect();
@@ -83,7 +85,7 @@ impl CommandDrivenPort for CommandRepository {
             })
     }
 
-    async fn fetch_commands(
+    async fn fetch_commands_by_order(
         &self, session_uuid: Uuid, status: &CommandStatus, options: QueryOptions,
     ) -> anyhow::Result<Vec<Command>> {
         let limit = options.limit.map_or("".to_string(), |n| format!("LIMIT {n}"));
@@ -100,17 +102,14 @@ impl CommandDrivenPort for CommandRepository {
              FROM {command_table}
                 INNER JOIN {session_table} ON {command_table}.session_id = {session_table}.id
                 WHERE {command_table}.status = $1 AND {session_table}.uuid = $2
-                {limit}
+                {limit_clause}
                ORDER BY 
-                {command_table}.updated_at {order}
+                {command_table}.execution_order {order_clause}
                "#,
-            //TODO this is a brittle way to find the next
-            //command, command record should instead have a "position" field, to know when to
-            //trigger it.
             command_table = self.command_table,
             session_table = self.session_table,
-            limit = limit,
-            order = options.sorting
+            limit_clause = limit,
+            order_clause = options.sorting
         );
         let res: Vec<CommandRecord> = query_as(&sql_query)
             .bind(status.name())
@@ -362,7 +361,7 @@ mod tests {
 
         let session_uuid = Uuid::parse_str("871b888e-2185-4bb8-b8b0-f87d4be4c133").unwrap();
         let result = repo
-            .fetch_commands(
+            .fetch_commands_by_order(
                 session_uuid,
                 &CommandStatus::Planned,
                 QueryOptions::new(None, Sorting::DESC),
