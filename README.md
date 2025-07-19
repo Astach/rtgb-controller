@@ -167,7 +167,7 @@ export NATS_TLS_VERIFY=true
 - Access the scheduler database:
 
 ```bash
-psql $"host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-full sslcert=certs/client/client.crt sslkey=certs/client/client.key sslrootcert=certs/ca.crt"
+psql "host=127.0.0.1 port=5432 dbname=<db_name> user=<db_user> sslmode=verify-full sslcert=certs/client/client.crt sslkey=certs/client/client.key sslrootcert=certs/ca.crt"
 ```
 
 - Unable to parse the json received via Nats subject: make sure to wrap your payload with single quote (`'`) not doubles (`"`)
@@ -216,6 +216,19 @@ nats publish fermentation.schedule.command '{
                  "duration": 48
              }
          ]
+     }
+ }'
+```
+
+```zsh
+nats publish chamber.device.event '{
+     "id": "550e8400-e29b-41d4-a716-446655440000",
+     "sent_at": "2024-12-15T12:34:56Z",
+     "version": 1,
+     "type": "Tracking",
+     "data": {
+         "session_id": "6f59d4be-2c5d-461d-9b9c-e8c84747268f",
+         "temperature": 20
      }
  }'
 ```

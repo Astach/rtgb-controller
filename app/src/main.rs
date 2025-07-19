@@ -73,7 +73,7 @@ async fn main() -> Result<(), anyhow::Error> {
                                     MessageType::Schedule(schedule_message_data) => scheduler_service
                                         .schedule(schedule_message_data)
                                         .await
-                                        .inspect(|it| debug!("Command Processed, {:?} commmand(s) created", it))
+                                        .inspect(|it| debug!("Command Processed, {it:?} commmand(s) created"))
                                         .inspect_err(|e| error!("{e}"))
                                         .map_err(|e| anyhow::anyhow!(e))
                                         .map(|_| ()),

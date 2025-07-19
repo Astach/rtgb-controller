@@ -102,9 +102,9 @@ impl CommandDrivenPort for CommandRepository {
              FROM {command_table}
                 INNER JOIN {session_table} ON {command_table}.session_id = {session_table}.id
                 WHERE {command_table}.status = $1 AND {session_table}.uuid = $2
-                {limit_clause}
                ORDER BY 
                 {command_table}.execution_order {order_clause}
+                {limit_clause}
                "#,
             command_table = self.command_table,
             session_table = self.session_table,
