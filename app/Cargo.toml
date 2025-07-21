@@ -9,7 +9,7 @@ name = "rtgb-controller"
 path = "src/main.rs"
 
 [dependencies]
-async-nats = "0.41"
+async-nats = "0.42"
 bigdecimal = "0.4"
 internal = { path = "../internal" }
 rustls = "0.23"
@@ -25,6 +25,8 @@ sqlx = { version = "0.8", features = [
   "bigdecimal",
   "time",
 ] }
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres", "nats"] }
 
 anyhow.workspace = true
 env_logger.workspace = true
@@ -37,4 +39,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-rcgen = "0.13"
+rcgen = "0.14"
